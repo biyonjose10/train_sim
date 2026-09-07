@@ -4316,16 +4316,28 @@ PrefabInstance:
       value: train tunnel end .001
       objectReference: {fileID: 0}
     - target: {fileID: 4144218210929061035, guid: aa051c4d2998a274c81d8d52261a3238, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1.5392
+      objectReference: {fileID: 0}
+    - target: {fileID: 4144218210929061035, guid: aa051c4d2998a274c81d8d52261a3238, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1.5392
+      objectReference: {fileID: 0}
+    - target: {fileID: 4144218210929061035, guid: aa051c4d2998a274c81d8d52261a3238, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1.5392
+      objectReference: {fileID: 0}
+    - target: {fileID: 4144218210929061035, guid: aa051c4d2998a274c81d8d52261a3238, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 6.24
+      value: 0.08
       objectReference: {fileID: 0}
     - target: {fileID: 4144218210929061035, guid: aa051c4d2998a274c81d8d52261a3238, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 4.73
+      value: 5.1238
       objectReference: {fileID: 0}
     - target: {fileID: 4144218210929061035, guid: aa051c4d2998a274c81d8d52261a3238, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 54.12
+      value: 55.13
       objectReference: {fileID: 0}
     - target: {fileID: 4144218210929061035, guid: aa051c4d2998a274c81d8d52261a3238, type: 3}
       propertyPath: m_LocalRotation.w
