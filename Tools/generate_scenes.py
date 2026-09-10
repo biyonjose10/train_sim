@@ -33,6 +33,13 @@ PACK = os.path.join(REPO, "Assets", "pixel horror abandoned rural  train station
 
 TRAIN_GUID = "7899c5f46e2286e4692bfa57b2f6c8e5"
 TRAIN_GO, TRAIN_TR = 5680802176122678309, 8443818322557161937
+
+# His rails, so the catenary that ships inside the rail prefab can be switched off
+# where it stands in front of the signal.
+RAIL_GUID = "5134ed3777d4c484d8fe19fd21f2cc1e"
+RAIL_GO, RAIL_TR = 2171760524236046288, 1623647493005633391
+RAIL_WIRE_GO = 6962243738968842197   # the "wire straight" child
+RAIL_SEGMENT_LENGTH = 101.76         # a segment covers (pivot - length) .. pivot
 # Mixamo "Louise" with an In Place walk clip. The asset pack figure it replaces was a bare
 # mannequin with no animation at all.
 PERSON_GUID = "c6785175debea5949a9e9556321b2d5f"      # Passengers/Louise@Walking.fbx
@@ -69,6 +76,7 @@ END_OF_TRACK_Z = 90.0
 APPROACH_SIGNAL_Z = -70.0      # midway along the run-in
 
 SIGNAL_SCALE = 1.3712
+SIGNAL_POS_Z = 18.459      # his station signal, on the line
 APPROACH_SIGNAL_POS = (-5.9773, 3.0711, APPROACH_SIGNAL_Z)
 
 PLATFORM_X, PLATFORM_TOP_Y = -6.9, 2.04   # Mixamo root sits at the feet
@@ -682,6 +690,47 @@ def patch_train_instance(sc, anchor, z, added, tag=None):
     row[3] = body
 
 
+def hide_catenary_over_signal(sc, signal_z):
+    """The rail prefab carries an overhead catenary, and one of its gantries stands directly in
+    front of the signal from the driving camera, which makes the light hard to read. Switch the
+    wires off on just the segment that spans the signal; the rest of the line keeps them."""
+    hidden = 0
+    pattern = (r"target: \{fileID: " + str(RAIL_TR) + ", guid: " + RAIL_GUID +
+               r", type: 3\}\n\s+propertyPath: m_LocalPosition\.z\n\s+value: (\S+)")
+
+    for row in sc.blocks:
+        if row[0] != 1001 or RAIL_GUID not in row[3]:
+            continue
+
+        m = re.search(pattern, row[3])
+
+        if not m:
+            continue
+
+        z = float(m.group(1))
+
+        if not (z - RAIL_SEGMENT_LENGTH <= signal_z <= z):
+            continue
+
+        if ("fileID: " + str(RAIL_WIRE_GO)) in row[3]:
+            continue
+
+        mod = ("    - target: {fileID: " + str(RAIL_WIRE_GO) + ", guid: " + RAIL_GUID +
+               ", type: 3}\n"
+               "      propertyPath: m_IsActive\n"
+               "      value: 0\n"
+               "      objectReference: {fileID: 0}\n"
+               "    m_RemovedComponents: []")
+
+        row[3] = row[3].replace("    m_RemovedComponents: []", mod, 1)
+        hidden += 1
+
+    if hidden == 0:
+        print("  WARNING: no rail segment spans the signal; catenary left alone")
+
+    return hidden
+
+
 def paint_his_signal(sc, red_on, yellow_on, green_on):
     """His signal lamps carry the default material; give them colours and states."""
     for nm, mat, on in (("Sphere", MAT_RED, red_on),
@@ -719,6 +768,7 @@ def build_scene1(his_guids):
     sc = Scene(SCENE1_SRC, pristine_scene1())
 
     lamps = paint_his_signal(sc, red_on=True, yellow_on=False, green_on=False)
+    hide_catenary_over_signal(sc, SIGNAL_POS_Z)
 
     stop_tr, _ = add_empty(sc, "StationStopWaypoint", (TRAIN_X, TRAIN_Y, TRAIN_STOP_Z))
     end_tr, _ = add_empty(sc, "EndOfTrackStopPoint", (TRAIN_X, TRAIN_Y, END_OF_TRACK_Z))
@@ -794,6 +844,8 @@ def build_scene2(his_guids):
     sc = Scene(SCENE1_SRC, pristine_scene1())   # his scene again: same lighting, rails, light, signal
 
     lamps = paint_his_signal(sc, red_on=True, yellow_on=False, green_on=False)
+
+    hide_catenary_over_signal(sc, SIGNAL_POS_Z)
 
     # The approach signal is already red by the time we get here.
     build_signal(sc, "Signal 1 (approach)", APPROACH_SIGNAL_POS,
