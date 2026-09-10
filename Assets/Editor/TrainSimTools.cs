@@ -54,18 +54,24 @@ namespace TrainSim.SceneBuilding
         }
 
         /// <summary>
-        /// Loads scene 1 with scene 2 alongside it for comparing the two. Scene 1 stays active,
-        /// so pressing Play still starts the run in.
+        /// Loads scene 1 with scene 2 alongside it, for comparing the two in the editor.
+        ///
+        /// Do not press Play with both loaded. Each scene carries its own train, signals and
+        /// station, and scene 2 opens on an enabled station camera, so that camera renders over
+        /// scene 1 and the run in is not what you see. Play scene 1 on its own: it loads scene 2
+        /// itself when the train settles.
         /// </summary>
-        [MenuItem("Tools/Train Sim/Open Both Scenes", priority = 2)]
+        [MenuItem("Tools/Train Sim/Open Both Scenes (inspect only)", priority = 2)]
         public static void OpenBothScenes()
         {
             Scene one = EditorSceneManager.OpenScene(Scene1Path, OpenSceneMode.Single);
             EditorSceneManager.OpenScene(Scene2Path, OpenSceneMode.Additive);
             SceneManager.SetActiveScene(one);
 
-            Debug.Log(
-                "[TRAIN SIM] Both scenes loaded. Scene 1 is active, so Play starts the run in."
+            Debug.LogWarning(
+                "[TRAIN SIM] Both scenes loaded for inspection. Do NOT press Play like this - " +
+                "scene 2 opens on an enabled station camera which renders over scene 1. " +
+                "Use Open Scene 1 to play the sequence."
             );
         }
 
