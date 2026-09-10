@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEditor;
+using System.IO;
 using UnityEditor.Animations;
+using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -275,6 +277,48 @@ namespace TrainSim.SceneBuilding
                 "[TRAIN SIM] Passenger prefab ready at " + PassengerPrefabPath +
                 " using clip " + walk.name + "."
             );
+        }
+
+        // ==========================================
+        // BUILD
+        // ==========================================
+
+        const string BuildDir = "Build/TrainSim";
+
+        /// <summary>
+        /// Builds a standalone Windows player so the whole thing can be run by double clicking one
+        /// file, with no Unity and no setup. Scene 1 is first in the list, so the player boots
+        /// straight into the run in and loads scene 2 itself.
+        /// </summary>
+        [MenuItem("Tools/Train Sim/Build Windows Player", priority = 40)]
+        public static void BuildWindowsPlayer()
+        {
+            Directory.CreateDirectory(BuildDir);
+
+            BuildPlayerOptions options = new BuildPlayerOptions();
+
+            // Order matters: index 0 is what the player opens with.
+            options.scenes = new[] { Scene1Path, Scene2Path };
+            options.locationPathName = BuildDir + "/TrainSim.exe";
+            options.target = BuildTarget.StandaloneWindows64;
+            options.options = BuildOptions.None;
+
+            BuildReport report = BuildPipeline.BuildPlayer(options);
+
+            if (report.summary.result == BuildResult.Succeeded)
+            {
+                Debug.Log(
+                    "[BUILD] Player written to " + BuildDir + "/TrainSim.exe (" +
+                    (report.summary.totalSize / (1024 * 1024)) + " MB)."
+                );
+            }
+            else
+            {
+                Debug.LogError(
+                    "[BUILD] Player build " + report.summary.result +
+                    " with " + report.summary.totalErrors + " errors."
+                );
+            }
         }
 
         // ==========================================

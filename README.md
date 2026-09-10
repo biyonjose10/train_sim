@@ -7,6 +7,28 @@ Chapter 1 runs straight into chapter 2 — **you only ever open scene 1 and pres
 
 ---
 
+## Just want to play it? One file, no Unity
+
+Grab the latest **Release** from the repo, unzip it, and double-click **`TrainSim.exe`**.
+
+That is the whole thing. No Unity install, no editor version to match, no scenes to open, no Build
+Settings. It boots straight into chapter 1, and chapter 2 loads by itself when you stop the train.
+
+**Controls:** **Space** to brake, then **Space** again to pull away once the signal turns green.
+**R** restarts if you overshoot the station. **Alt+F4** or **Esc** to quit.
+
+The rest of this README is only for working on the project in Unity.
+
+To produce that build yourself: open the project and run
+**Tools → Train Sim → Build Windows Player**. It writes `Build/TrainSim/TrainSim.exe` with scene 1
+as the startup scene. The build folder is deliberately **not committed** — a Unity player is a few
+hundred MB and git would carry that weight in every clone forever, which is why it ships as a
+Release attachment instead.
+
+---
+
+## Working on it in Unity
+
 ## What you need
 
 | | |
@@ -50,19 +72,19 @@ to download separately and no package to import from the Asset Store.
 asset packs, and building its Library from scratch. The progress bar will sit on
 "Importing assets" for a while. This only happens once.
 
-When it finishes Unity opens an **empty "Untitled" scene**. That is normal — it does not
-automatically open a scene. Carry on to the next step.
+**Scene 1 opens by itself.** `Assets/Editor/OpenScene1OnLoad.cs` opens it the first time the
+project loads in a session, because Unity otherwise starts on an empty "Untitled" scene and it
+looks like nothing is there. It only steps in when no other scene is open, so it will not fight you
+once you are working.
 
 ---
 
 ## Running it
 
-**Open scene 1 and press Play.** Either:
+**Press Play.** Scene 1 should already be open; if it is not, either:
 
 - **Project** panel → `Assets` → `Scenes` → double-click **`SampleScene`**, or
 - menu bar → **Tools → Train Sim → Open Scene 1**
-
-Then press **Play**.
 
 Scene 2 loads by itself when the train stops. You do not open it manually.
 
@@ -96,7 +118,8 @@ to confirm the sequence is running correctly.
 ## If something looks wrong
 
 **Unity opens on an empty "Untitled" scene.**
-Expected. Open `Assets/Scenes/SampleScene` yourself, as above.
+The auto-open only runs once per session and skips if another scene is already open. Open
+`Assets/Scenes/SampleScene` yourself, as above.
 
 **You are looking at the station instead of the train, and Play starts mid-sequence.**
 You have scene 2 open on its own. Scene 2 legitimately opens on a station camera, because that is
@@ -131,6 +154,7 @@ Everything lives under **Tools → Train Sim**:
 | **Probe Layout** | Prints real mesh bounds and the platform extent |
 | **Carve Tunnel Through Terrain** | Cuts the bore through the hill. Already applied |
 | **Set Up Passenger Model** | Re-imports the Mixamo character and rebuilds its animator |
+| **Build Windows Player** | Writes a standalone `Build/TrainSim/TrainSim.exe` |
 
 ---
 
