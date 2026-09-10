@@ -1,0 +1,242 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+using TMPro;
+
+/// <summary>
+/// Runs the scene 2 cutaway: the train is already stopped at the platform, the last signal is
+/// red, and we have ten seconds of station footage before it turns green. At the ninth second
+/// the camera cuts back to the train so the player is looking at the signal when it changes.
+/// </summary>
+public class Scene2Director : MonoBehaviour
+{
+    [Header("Station Shots")]
+    public Camera stationCameraA;               // Wide, from under the west shelter
+    public Camera stationCameraB;               // Close, at the carriage side
+    public Camera stationCameraC;               // Across the tracks from the east platform
+    public float shotBTime = 3.5f;
+    public float shotCTime = 6.5f;
+
+    [Header("Train Shot")]
+    public Camera trainCamera;                  // Third person, follows the train
+    public float cutToTrainTime = 9f;
+
+    [Header("Last Signal Settings")]
+    public GameObject lastSignalRedLight;       // Red sphere of the last signal
+    public GameObject lastSignalGreenLight;     // Green sphere of the last signal
+    public float greenLightDelay = 10f;
+
+    [Header("Handover")]
+    public TrainSpaceDrive trainDrive;
+    public CanvasGroup pressSpacePrompt;
+    public TMP_Text pressSpaceLabel;
+    public float promptFadeSpeed = 2f;
+
+    private float timer;
+
+    private int currentShot = -1;
+
+    private bool hasCutToTrain = false;
+    private bool signalIsGreen = false;
+    private bool promptDismissed = false;
+
+    void Start()
+    {
+        timer = 0f;
+
+        // Last signal starts RED
+        if (lastSignalRedLight != null)
+        {
+            lastSignalRedLight.SetActive(true);
+        }
+
+        if (lastSignalGreenLight != null)
+        {
+            lastSignalGreenLight.SetActive(false);
+        }
+
+        // The player does not get the train until the signal clears.
+        if (trainDrive != null)
+        {
+            trainDrive.controlEnabled = false;
+        }
+
+        if (pressSpacePrompt != null)
+        {
+            pressSpacePrompt.alpha = 0f;
+        }
+
+        ShowShot(0);
+
+        Debug.Log(
+            "[SCENE 2] Train is at the platform. Signal turns GREEN in " +
+            greenLightDelay +
+            " seconds."
+        );
+    }
+
+    void Update()
+    {
+        timer += Time.deltaTime;
+
+        // ==========================================
+        // STATION SHOTS
+        // ==========================================
+
+        if (!hasCutToTrain)
+        {
+            if (timer >= cutToTrainTime)
+            {
+                CutToTrain();
+            }
+            else if (timer >= shotCTime)
+            {
+                ShowShot(2);
+            }
+            else if (timer >= shotBTime)
+            {
+                ShowShot(1);
+            }
+            else
+            {
+                ShowShot(0);
+            }
+        }
+
+        // ==========================================
+        // LAST SIGNAL TURNS GREEN
+        // ==========================================
+
+        if (!signalIsGreen &&
+            timer >= greenLightDelay)
+        {
+            TurnLastSignalGreen();
+        }
+
+        // ==========================================
+        // PROMPT FADE
+        // ==========================================
+
+        UpdatePrompt();
+    }
+
+    // ==============================================
+    // CAMERA SWITCHING
+    // ==============================================
+
+    private void ShowShot(int index)
+    {
+        if (currentShot == index)
+        {
+            return;
+        }
+
+        currentShot = index;
+
+        SetCameraEnabled(stationCameraA, index == 0);
+        SetCameraEnabled(stationCameraB, index == 1);
+        SetCameraEnabled(stationCameraC, index == 2);
+        SetCameraEnabled(trainCamera, false);
+
+        Debug.Log(
+            "[CAMERA] Station shot " +
+            (char)('A' + index) +
+            " at " +
+            timer.ToString("F2") +
+            "s."
+        );
+    }
+
+    private void CutToTrain()
+    {
+        hasCutToTrain = true;
+        currentShot = 3;
+
+        SetCameraEnabled(stationCameraA, false);
+        SetCameraEnabled(stationCameraB, false);
+        SetCameraEnabled(stationCameraC, false);
+        SetCameraEnabled(trainCamera, true);
+
+        Debug.Log(
+            "[CAMERA] Cut to train view at " +
+            timer.ToString("F2") +
+            "s. The signal is still RED."
+        );
+    }
+
+    private void SetCameraEnabled(Camera cam, bool state)
+    {
+        if (cam == null)
+        {
+            return;
+        }
+
+        cam.enabled = state;
+    }
+
+    // ==============================================
+    // LAST SIGNAL TURNS GREEN
+    // ==============================================
+
+    private void TurnLastSignalGreen()
+    {
+        signalIsGreen = true;
+
+        if (lastSignalRedLight != null)
+        {
+            lastSignalRedLight.SetActive(false);
+        }
+
+        if (lastSignalGreenLight != null)
+        {
+            lastSignalGreenLight.SetActive(true);
+        }
+
+        if (trainDrive != null)
+        {
+            trainDrive.controlEnabled = true;
+        }
+
+        if (pressSpaceLabel != null)
+        {
+            pressSpaceLabel.text = "PRESS SPACE TO GO";
+        }
+
+        Debug.Log(
+            "[SIGNAL] Last signal is now GREEN."
+        );
+
+        Debug.Log(
+            "[SCENE 2] Control handed to the player. Press SPACE to start and stop the train."
+        );
+    }
+
+    // ==============================================
+    // PRESS SPACE PROMPT
+    // ==============================================
+
+    private void UpdatePrompt()
+    {
+        if (pressSpacePrompt == null)
+        {
+            return;
+        }
+
+        if (!promptDismissed &&
+            signalIsGreen &&
+            Keyboard.current != null &&
+            Keyboard.current.spaceKey.wasPressedThisFrame)
+        {
+            promptDismissed = true;
+        }
+
+        float target =
+            (signalIsGreen && !promptDismissed) ? 1f : 0f;
+
+        pressSpacePrompt.alpha =
+            Mathf.MoveTowards(
+                pressSpacePrompt.alpha,
+                target,
+                promptFadeSpeed * Time.deltaTime
+            );
+    }
+}
