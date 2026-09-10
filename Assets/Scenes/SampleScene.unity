@@ -1946,8 +1946,8 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   target: {fileID: 2300000351}
-  localOffset: {x: 0, y: 11, z: 44}
-  lookAtOffset: {x: -2.5, y: 1.5, z: 75}
+  localOffset: {x: 0, y: 7, z: 52}
+  lookAtOffset: {x: -2, y: 1.5, z: 78}
   followSmoothing: 4
   snapOnStart: 1
 --- !u!1001 &2300000481

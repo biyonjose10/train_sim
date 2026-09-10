@@ -80,10 +80,12 @@ SHOTS = [
     ("Cam_Station_B", (-5.6, 2.9, -6.5), (-3.8, 2.3, 3.0), False),
     ("Cam_Station_C", (7.4, 3.8, -8.0), (-5.6, 2.8, 15.0), False),
 ]
-# Top middle third person: directly above the train's centre line, 44 forward of the pivot,
-# which is 17 units behind the nose. Looking down the track so the signal is in frame.
-FOLLOW_OFFSET = (0.0, 11.0, 44.0)
-FOLLOW_LOOKAT = (-2.5, 1.5, 75.0)
+# Top middle third person, tight on the front of the train: on the centre line, 52 forward of
+# the pivot, which is only 9 units behind the nose, and 2.4 above the carriage roof. Looking
+# down the track keeps the signal in frame, and being closer makes it read larger when it
+# changes.
+FOLLOW_OFFSET = (0.0, 7.0, 52.0)
+FOLLOW_LOOKAT = (-2.0, 1.5, 78.0)
 
 PASSENGERS = [
     (-7.6, -19.0, 0.0), (-6.4, -15.0, 0.35), (-7.9, -10.0, 0.8), (-6.2, -6.0, 1.1),
