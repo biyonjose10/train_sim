@@ -92,6 +92,93 @@ namespace TrainSim.SceneBuilding
         }
 
         // ==========================================
+        // TUNNEL
+        // ==========================================
+
+        // The bore runs along the track at x = 0, through the hill the pack put at z = 63.
+        const float TunnelHalfWidth = 5f;
+        const float TunnelStartZ = 44f;
+        const float TunnelEndZ = 96f;
+
+        /// <summary>
+        /// Punches a hole through the terrain along the track so the hill becomes a tunnel the
+        /// train can run through, instead of solid rock with the rails buried in it. The pack
+        /// supplies the tunnel mouth as a prefab but never cut the ground away behind it.
+        ///
+        /// This edits stage.asset in place. It is idempotent, and revertible with git.
+        /// </summary>
+        [MenuItem("Tools/Train Sim/Carve Tunnel Through Terrain", priority = 21)]
+        public static void CarveTunnel()
+        {
+            Terrain terrain = Object.FindFirstObjectByType<Terrain>();
+
+            if (terrain == null)
+            {
+                // Nothing open, which is the normal case when this runs from the command line.
+                EditorSceneManager.OpenScene(Scene1Path, OpenSceneMode.Single);
+                terrain = Object.FindFirstObjectByType<Terrain>();
+            }
+
+            if (terrain == null || terrain.terrainData == null)
+            {
+                Debug.LogError("[TRAIN SIM] No terrain found.");
+                return;
+            }
+
+            TerrainData data = terrain.terrainData;
+            Vector3 origin = terrain.transform.position;
+            Vector3 size = data.size;
+
+            int res = data.holesResolution;
+            bool[,] holes = data.GetHoles(0, 0, res, res);
+
+            int cut = 0;
+
+            for (int y = 0; y < res; y++)
+            {
+                // Holes are indexed [y, x], with y running along z.
+                float worldZ = origin.z + (y / (float)(res - 1)) * size.z;
+
+                if (worldZ < TunnelStartZ || worldZ > TunnelEndZ)
+                {
+                    continue;
+                }
+
+                for (int x = 0; x < res; x++)
+                {
+                    float worldX = origin.x + (x / (float)(res - 1)) * size.x;
+
+                    if (Mathf.Abs(worldX) > TunnelHalfWidth)
+                    {
+                        continue;
+                    }
+
+                    if (holes[y, x])
+                    {
+                        holes[y, x] = false;      // false means hole
+                        cut++;
+                    }
+                }
+            }
+
+            if (cut == 0)
+            {
+                Debug.Log("[TRAIN SIM] Tunnel already carved, nothing to do.");
+                return;
+            }
+
+            Undo.RegisterCompleteObjectUndo(data, "Carve tunnel");
+            data.SetHoles(0, 0, holes);
+            EditorUtility.SetDirty(data);
+            AssetDatabase.SaveAssets();
+
+            Debug.Log(
+                "[TRAIN SIM] Carved " + cut + " terrain cells into a tunnel between z " +
+                TunnelStartZ + " and z " + TunnelEndZ + "."
+            );
+        }
+
+        // ==========================================
         // MEASURING
         // ==========================================
 

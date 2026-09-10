@@ -76,8 +76,10 @@ SHOTS = [
     ("Cam_Station_B", (-5.6, 2.9, -6.5), (-3.8, 2.3, 3.0), False),
     ("Cam_Station_C", (7.4, 3.8, -8.0), (-5.6, 2.8, 15.0), False),
 ]
-FOLLOW_OFFSET = (5.0, 6.5, 38.0)
-FOLLOW_LOOKAT = (-3.0, 2.8, 63.0)
+# Top middle third person: directly above the train's centre line, 44 forward of the pivot,
+# which is 17 units behind the nose. Looking down the track so the signal is in frame.
+FOLLOW_OFFSET = (0.0, 11.0, 44.0)
+FOLLOW_LOOKAT = (-2.5, 1.5, 75.0)
 
 PASSENGERS = [
     (-7.6, -19.0, 0.0), (-6.4, -15.0, 0.35), (-7.9, -10.0, 0.8), (-6.2, -6.0, 1.1),
@@ -86,7 +88,10 @@ PASSENGERS = [
 
 STATION_KEEP = ("cement platform", "train  shellter", "mettle bench", "bench",
                 "sample vending machine", "Meta lPlates Rusted", "beem",
-                "window.02", "Concrete tiles")
+                "window.02", "Concrete tiles",
+                # The tunnel mouth. Without these the terrain hill just reads as solid rock
+                # with the track running into it.
+                "train tunnel")
 TERRAIN_ANCHORS = [1294392831, 1294392834, 1294392833, 1294392832]
 
 
