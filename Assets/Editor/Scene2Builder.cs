@@ -3,8 +3,6 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
-using TMPro;
 
 namespace TrainSim.SceneBuilding
 {
@@ -35,8 +33,10 @@ namespace TrainSim.SceneBuilding
         const string RailPrefabPath =
             "Assets/Polyeler/Simple Train Pack/Prefabs/Rail/Straight rail.prefab";
 
+        // The model prefab, not Prefabs/Hitogatas.prefab. That wrapper only adds a capsule
+        // collider, which figures moved by transform do not want anyway.
         const string PassengerPrefabPath =
-            "Assets/pixel horror abandoned rural  train station/Prefabs/Hitogatas.prefab";
+            "Assets/pixel horror abandoned rural  train station/Models/Hitogatas.fbx";
 
         const string RedMaterialPath = "Assets/New Material.mat";      // 0.84, 0.09, 0.10
         const string YellowMaterialPath = "Assets/New Material 3.mat"; // 1.00, 0.98, 0.00
@@ -119,11 +119,10 @@ namespace TrainSim.SceneBuilding
             Transform stopWaypoint = BuildStopWaypoint(root.transform);
             SignalParts signal = BuildSignal(root.transform);
             CameraSet cameras = BuildCameras(root.transform, train.transform);
-            PromptParts prompt = BuildPrompt(root.transform);
 
             BuildPassengers(root.transform);
 
-            WireDirector(root.transform, train, signal, cameras, prompt);
+            WireDirector(root.transform, train, signal, cameras);
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -478,52 +477,6 @@ namespace TrainSim.SceneBuilding
         }
 
         // ==========================================
-        // PROMPT
-        // ==========================================
-
-        class PromptParts
-        {
-            public CanvasGroup Group;
-            public TMP_Text Label;
-        }
-
-        static PromptParts BuildPrompt(Transform parent)
-        {
-            GameObject ui = NewChild("UI", parent);
-
-            GameObject canvasObject = NewChild("Canvas", ui.transform);
-
-            Canvas canvas = canvasObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-            CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-
-            CanvasGroup group = canvasObject.AddComponent<CanvasGroup>();
-            group.alpha = 0f;
-            group.interactable = false;
-            group.blocksRaycasts = false;
-
-            GameObject labelObject = NewChild("PressSpaceLabel", canvasObject.transform);
-
-            TextMeshProUGUI label = labelObject.AddComponent<TextMeshProUGUI>();
-            label.text = "PRESS SPACE";
-            label.fontSize = 42f;
-            label.alignment = TextAlignmentOptions.Center;
-            label.color = Color.white;
-
-            RectTransform rect = label.rectTransform;
-            rect.anchorMin = new Vector2(0.5f, 0f);
-            rect.anchorMax = new Vector2(0.5f, 0f);
-            rect.pivot = new Vector2(0.5f, 0f);
-            rect.anchoredPosition = new Vector2(0f, 90f);
-            rect.sizeDelta = new Vector2(600f, 80f);
-
-            return new PromptParts { Group = group, Label = label };
-        }
-
-        // ==========================================
         // DIRECTOR
         // ==========================================
 
@@ -531,8 +484,7 @@ namespace TrainSim.SceneBuilding
             Transform parent,
             GameObject train,
             SignalParts signal,
-            CameraSet cameras,
-            PromptParts prompt)
+            CameraSet cameras)
         {
             GameObject go = NewChild("Scene2Director", parent);
 
@@ -556,8 +508,9 @@ namespace TrainSim.SceneBuilding
             director.lastSignalGreenLight = signal.Green;
 
             director.trainDrive = train.GetComponent<TrainSpaceDrive>();
-            director.pressSpacePrompt = prompt.Group;
-            director.pressSpaceLabel = prompt.Label;
+
+            // pressSpacePrompt is left empty on purpose: Scene2Director builds the canvas and
+            // label itself at runtime.
         }
 
         // ==========================================

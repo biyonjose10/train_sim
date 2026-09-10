@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
@@ -59,6 +60,8 @@ public class Scene2Director : MonoBehaviour
         {
             trainDrive.controlEnabled = false;
         }
+
+        EnsurePrompt();
 
         if (pressSpacePrompt != null)
         {
@@ -213,6 +216,52 @@ public class Scene2Director : MonoBehaviour
     // ==============================================
     // PRESS SPACE PROMPT
     // ==============================================
+
+    /// <summary>
+    /// Builds the prompt in code when the scene does not already carry one. A canvas and a
+    /// TextMeshPro label are a lot of serialized data for two words, and making them here keeps
+    /// the scene file simple and the prompt impossible to lose.
+    /// </summary>
+    private void EnsurePrompt()
+    {
+        if (pressSpacePrompt != null)
+        {
+            return;
+        }
+
+        GameObject canvasObject = new GameObject("Scene2 Prompt Canvas");
+
+        Canvas canvas = canvasObject.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 100;
+
+        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+
+        pressSpacePrompt = canvasObject.AddComponent<CanvasGroup>();
+        pressSpacePrompt.alpha = 0f;
+        pressSpacePrompt.interactable = false;
+        pressSpacePrompt.blocksRaycasts = false;
+
+        GameObject labelObject = new GameObject("PressSpaceLabel");
+        labelObject.transform.SetParent(canvasObject.transform, false);
+
+        TextMeshProUGUI label = labelObject.AddComponent<TextMeshProUGUI>();
+        label.text = "PRESS SPACE";
+        label.fontSize = 42f;
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = Color.white;
+
+        RectTransform rect = label.rectTransform;
+        rect.anchorMin = new Vector2(0.5f, 0f);
+        rect.anchorMax = new Vector2(0.5f, 0f);
+        rect.pivot = new Vector2(0.5f, 0f);
+        rect.anchoredPosition = new Vector2(0f, 90f);
+        rect.sizeDelta = new Vector2(600f, 80f);
+
+        pressSpaceLabel = label;
+    }
 
     private void UpdatePrompt()
     {
