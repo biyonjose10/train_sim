@@ -33,8 +33,12 @@ PACK = os.path.join(REPO, "Assets", "pixel horror abandoned rural  train station
 
 TRAIN_GUID = "7899c5f46e2286e4692bfa57b2f6c8e5"
 TRAIN_GO, TRAIN_TR = 5680802176122678309, 8443818322557161937
-PERSON_GUID = "ab147a2e39ef2ad4aa12cbc6597a626f"
+# Mixamo "Louise" with an In Place walk clip. The asset pack figure it replaces was a bare
+# mannequin with no animation at all.
+PERSON_GUID = "c6785175debea5949a9e9556321b2d5f"      # Passengers/Louise@Walking.fbx
 PERSON_GO, PERSON_TR = 919132149155446097, -8679921383154817045
+PERSON_ANIMATOR = 5866666021909216657
+PERSON_CONTROLLER = "d00cc9a58a621744f9de3897b4f90ad3"  # Passengers/Passenger.controller
 
 MAT_RED = "a05474e98d8e14850be3e19a5f0a45b5"      # New Material.mat
 MAT_YELLOW = "4edc65da92c7a4841b08cbd2e1ff65ea"   # New Material 3.mat
@@ -67,7 +71,7 @@ APPROACH_SIGNAL_Z = -70.0      # midway along the run-in
 SIGNAL_SCALE = 1.3712
 APPROACH_SIGNAL_POS = (-5.9773, 3.0711, APPROACH_SIGNAL_Z)
 
-PLATFORM_X, PLATFORM_TOP_Y = -6.9, 2.12
+PLATFORM_X, PLATFORM_TOP_Y = -6.9, 2.04   # Mixamo root sits at the feet
 DOOR_LINE_X = -3.0
 DOOR_LOCAL_Z = [35.46, 41.46, 47.46, 53.46]
 
@@ -400,13 +404,14 @@ def box_trigger_block(a, go, size):
 """ % (go, f(size[0]), f(size[1]), f(size[2])))
 
 
-def prefab_instance_block(a, guid, go_target, tr_target, name, pos, added=None, tag=None):
+def prefab_instance_block(a, guid, go_target, tr_target, name, pos, added=None,
+                          tag=None, extra_mods=None):
     mods = []
 
-    def mod(t, path, val):
+    def mod(t, path, val, ref=None):
         mods.append("    - target: {fileID: %d, guid: %s, type: 3}\n"
                     "      propertyPath: %s\n      value: %s\n"
-                    "      objectReference: {fileID: 0}" % (t, guid, path, val))
+                    "      objectReference: %s" % (t, guid, path, val, ref or "{fileID: 0}"))
 
     mod(go_target, "m_Name", name)
     if tag:
@@ -417,6 +422,9 @@ def prefab_instance_block(a, guid, go_target, tr_target, name, pos, added=None, 
         mod(tr_target, "m_LocalRotation." + ax, f(v))
     for ax in "xyz":
         mod(tr_target, "m_LocalEulerAnglesHint." + ax, "0")
+
+    for t, path, val, ref in (extra_mods or []):
+        mod(t, path, val, ref)
 
     ac = ("    m_AddedComponents:\n" + "\n".join(
         "    - targetCorrespondingSourceObject: {fileID: %d, guid: %s, type: 3}\n"
@@ -849,9 +857,16 @@ def build_scene2(his_guids):
         dt, dg = add_empty(sc, "Door %d" % (i + 1), (DOOR_LINE_X, PLATFORM_TOP_Y, door_z))
         walker = sc.ids.new()
         inst = sc.ids.new()
-        sc.add(prefab_instance_block(inst, PERSON_GUID, PERSON_GO, PERSON_TR,
-                                     "Passenger %d" % (i + 1),
-                                     (sx, PLATFORM_TOP_Y, sz), added=[walker]))
+        sc.add(prefab_instance_block(
+            inst, PERSON_GUID, PERSON_GO, PERSON_TR,
+            "Passenger %d" % (i + 1),
+            (sx, PLATFORM_TOP_Y, sz), added=[walker],
+            extra_mods=[
+                (PERSON_ANIMATOR, "m_Controller", "",
+                 "{fileID: 9100000, guid: %s, type: 2}" % PERSON_CONTROLLER),
+                # The clip is In Place, so the walker keeps control of where she actually goes.
+                (PERSON_ANIMATOR, "m_ApplyRootMotion", "0", None),
+            ]))
         sc.roots.append(inst)
         pgo = sc.ids.new()
         sc.add(stripped_block(pgo, 1, "GameObject", PERSON_GO, PERSON_GUID, inst))
@@ -864,7 +879,7 @@ def build_scene2(his_guids):
   arriveDistance: 0.15
   deactivateOnArrival: 1
   boardDelay: 0.2
-  enableBoneWalk: 1
+  enableBoneWalk: 0
   stepFrequency: 2.2
   legSwingAngle: 26
   armSwingAngle: 16

@@ -20,6 +20,8 @@ public class PassengerWalker : MonoBehaviour
     public float boardDelay = 0.2f;
 
     [Header("Walk Cycle")]
+    // Off when the model carries a real animation clip; on for rigs that ship without one,
+    // which is the case for the asset pack figure.
     public bool enableBoneWalk = true;
     public float stepFrequency = 2.2f;
     public float legSwingAngle = 26f;
@@ -51,16 +53,19 @@ public class PassengerWalker : MonoBehaviour
     {
         waitTimer = startDelay;
 
-        // No controller exists, but an animator on the imported rig would still fight the
-        // bone rotations written below.
-        Animator animator = GetComponentInChildren<Animator>();
-
-        if (animator != null)
+        // Only silence the animator when we are driving the bones ourselves. With a real walk
+        // clip the animator is the thing doing the walking, so leave it alone.
+        if (enableBoneWalk)
         {
-            animator.enabled = false;
-        }
+            Animator animator = GetComponentInChildren<Animator>();
 
-        CacheBones();
+            if (animator != null)
+            {
+                animator.enabled = false;
+            }
+
+            CacheBones();
+        }
     }
 
     void Update()

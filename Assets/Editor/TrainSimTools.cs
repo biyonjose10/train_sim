@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -28,7 +29,7 @@ namespace TrainSim.SceneBuilding
         const string RailPrefabPath =
             "Assets/Polyeler/Simple Train Pack/Prefabs/Rail/Straight rail.prefab";
 
-        const string PassengerPrefabPath =
+        const string HitogatasModelPath =
             "Assets/pixel horror abandoned rural  train station/Models/Hitogatas.fbx";
 
         const string StationScenePath =
@@ -179,6 +180,98 @@ namespace TrainSim.SceneBuilding
         }
 
         // ==========================================
+        // PASSENGER MODEL
+        // ==========================================
+
+        const string PassengerModelPath = "Assets/Passengers/Louise@Walking.fbx";
+        const string PassengerControllerPath = "Assets/Passengers/Passenger.controller";
+        const string PassengerPrefabPath = "Assets/Passengers/Passenger.prefab";
+
+        /// <summary>
+        /// Turns the downloaded Mixamo character into something the generator can drop into a
+        /// scene: humanoid rig, a looping walk clip, an animator controller that plays it, and a
+        /// prefab with PassengerWalker already on it.
+        ///
+        /// The clip was exported In Place, so it has no root motion and PassengerWalker keeps
+        /// full control of where the figure actually goes.
+        /// </summary>
+        [MenuItem("Tools/Train Sim/Set Up Passenger Model", priority = 22)]
+        public static void SetUpPassengerModel()
+        {
+            ModelImporter importer = AssetImporter.GetAtPath(PassengerModelPath) as ModelImporter;
+
+            if (importer == null)
+            {
+                Debug.LogError("[TRAIN SIM] No model at " + PassengerModelPath);
+                return;
+            }
+
+            importer.animationType = ModelImporterAnimationType.Human;
+            importer.importAnimation = true;
+
+            ModelImporterClipAnimation[] clips = importer.defaultClipAnimations;
+
+            if (clips.Length > 0)
+            {
+                clips[0].name = "Walk";
+                clips[0].loopTime = true;
+                importer.clipAnimations = clips;
+            }
+
+            importer.SaveAndReimport();
+
+            AnimationClip walk = null;
+
+            foreach (Object o in AssetDatabase.LoadAllAssetsAtPath(PassengerModelPath))
+            {
+                AnimationClip c = o as AnimationClip;
+
+                if (c != null && !c.name.StartsWith("__"))
+                {
+                    walk = c;
+                }
+            }
+
+            if (walk == null)
+            {
+                Debug.LogError("[TRAIN SIM] No walk clip found inside " + PassengerModelPath);
+                return;
+            }
+
+            AnimatorController controller =
+                AnimatorController.CreateAnimatorControllerAtPathWithClip(
+                    PassengerControllerPath, walk);
+
+            GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(PassengerModelPath);
+            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            instance.name = "Passenger";
+
+            Animator animator = instance.GetComponent<Animator>();
+
+            if (animator == null)
+            {
+                animator = instance.AddComponent<Animator>();
+            }
+
+            animator.runtimeAnimatorController = controller;
+            animator.applyRootMotion = false;
+
+            // The clip drives the legs now, so the hand rolled bone swing is off.
+            PassengerWalker walker = instance.AddComponent<PassengerWalker>();
+            walker.enableBoneWalk = false;
+
+            PrefabUtility.SaveAsPrefabAsset(instance, PassengerPrefabPath);
+            Object.DestroyImmediate(instance);
+
+            AssetDatabase.SaveAssets();
+
+            Debug.Log(
+                "[TRAIN SIM] Passenger prefab ready at " + PassengerPrefabPath +
+                " using clip " + walk.name + "."
+            );
+        }
+
+        // ==========================================
         // MEASURING
         // ==========================================
 
@@ -195,7 +288,8 @@ namespace TrainSim.SceneBuilding
 
             ProbePrefab(sb, TrainPrefabPath);
             ProbePrefab(sb, RailPrefabPath);
-            ProbePrefab(sb, PassengerPrefabPath);
+            ProbePrefab(sb, PassengerModelPath);
+            ProbePrefab(sb, HitogatasModelPath);
 
             ProbeTerrainAndPlatforms(sb);
 
