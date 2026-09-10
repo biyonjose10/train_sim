@@ -18,6 +18,9 @@ public class PassengerWalker : MonoBehaviour
     [Header("Boarding")]
     public bool deactivateOnArrival = true;
     public float boardDelay = 0.2f;
+    // Wait at the platform edge until the door has actually slid open, rather than walking
+    // through a closed carriage side.
+    public TrainDoor door;
 
     [Header("Walk Cycle")]
     // Off when the model carries a real animation clip; on for rigs that ship without one,
@@ -109,6 +112,15 @@ public class PassengerWalker : MonoBehaviour
         if (waypoint == null)
         {
             currentWaypoint++;
+            return;
+        }
+
+        // The last leg is the step off the platform and into the carriage. Hold at the edge
+        // until there is a door to step through.
+        if (door != null &&
+            currentWaypoint == waypoints.Length - 1 &&
+            !door.IsOpenEnough)
+        {
             return;
         }
 

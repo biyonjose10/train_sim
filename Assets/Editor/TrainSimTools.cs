@@ -347,6 +347,8 @@ namespace TrainSim.SceneBuilding
             Scene scene = EditorSceneManager.OpenScene(StationScenePath, OpenSceneMode.Additive);
 
             float platformTop = float.MinValue;
+            float platformMinX = float.MaxValue, platformMaxX = float.MinValue;
+            float platformMinZ = float.MaxValue, platformMaxZ = float.MinValue;
 
             foreach (GameObject root in scene.GetRootGameObjects())
             {
@@ -370,15 +372,29 @@ namespace TrainSim.SceneBuilding
                 foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>())
                 {
                     // The west platform is the one the passengers board from.
-                    if (renderer.bounds.center.x < 0f &&
-                        renderer.bounds.max.y > platformTop)
+                    if (renderer.bounds.center.x >= 0f)
+                    {
+                        continue;
+                    }
+
+                    if (renderer.bounds.max.y > platformTop)
                     {
                         platformTop = renderer.bounds.max.y;
                     }
+
+                    platformMinX = Mathf.Min(platformMinX, renderer.bounds.min.x);
+                    platformMaxX = Mathf.Max(platformMaxX, renderer.bounds.max.x);
+                    platformMinZ = Mathf.Min(platformMinZ, renderer.bounds.min.z);
+                    platformMaxZ = Mathf.Max(platformMaxZ, renderer.bounds.max.z);
                 }
             }
 
-            sb.AppendLine("west platform surface y = " + platformTop);
+            sb.AppendLine("west platform deck");
+            sb.AppendLine("   surface y = " + platformTop);
+            sb.AppendLine("   x from " + platformMinX + " to " + platformMaxX);
+            sb.AppendLine("   z from " + platformMinZ + " to " + platformMaxZ);
+            sb.AppendLine("   train carriage side sits at x = -3.73, so the gap to step over is "
+                          + (-3.73f - platformMaxX));
 
             EditorSceneManager.CloseScene(scene, true);
         }

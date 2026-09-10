@@ -47,8 +47,8 @@ PERSON_GO, PERSON_TR = 919132149155446097, -8679921383154817045
 PERSON_ANIMATOR = 5866666021909216657
 PERSON_CONTROLLER = "d00cc9a58a621744f9de3897b4f90ad3"  # Passengers/Passenger.controller
 
-MAT_RED = "a05474e98d8e14850be3e19a5f0a45b5"      # New Material.mat
-MAT_YELLOW = "4edc65da92c7a4841b08cbd2e1ff65ea"   # New Material 3.mat
+MAT_RED = "aca046793e216e037c2e01a580e9127f"      # Materials/Signal Red.mat, emissive
+MAT_YELLOW = "170f3d89319b2840119add65eda2157d"   # Materials/Signal Yellow.mat, emissive
 MAT_DARK = "9fa6d9495e43248479959c8c53531c6e"     # New Material 2.mat
 
 MESH = "0000000000000000e000000000000000"
@@ -62,7 +62,8 @@ def guid_for(p):
 MAT_GREEN = guid_for("Assets/Materials/Signal Green.mat")
 SCRIPTS = {n: guid_for("Assets/" + n + ".cs") for n in
            ("Scene2Director", "PassengerWalker", "TrainSpaceDrive",
-            "TrainFollowCamera", "ArriveAtStationLoader")}
+            "TrainFollowCamera", "ArriveAtStationLoader",
+            "TrainDoor", "TrainWheels", "PassengerVariety", "TrainAudio", "Scene1Hud")}
 # His two scripts keep their own guids.
 SCRIPTS["TrainStationButtonStop"] = None   # filled in from the meta at run time
 SCRIPTS["Signal1Trigger"] = None
@@ -79,9 +80,24 @@ SIGNAL_SCALE = 1.3712
 SIGNAL_POS_Z = 18.459      # his station signal, on the line
 APPROACH_SIGNAL_POS = (-5.9773, 3.0711, APPROACH_SIGNAL_Z)
 
-PLATFORM_X, PLATFORM_TOP_Y = -6.9, 2.04   # Mixamo root sits at the feet
-DOOR_LINE_X = -3.0
-DOOR_LOCAL_Z = [35.46, 41.46, 47.46, 53.46]
+# Measured with Tools > Train Sim > Probe Layout rather than guessed. The old numbers put
+# passengers off the south end of the deck and their door point out over the track, which is
+# why they appeared to walk on air.
+PLATFORM_X_MIN, PLATFORM_X_MAX = -11.92, -4.80
+PLATFORM_Z_MIN, PLATFORM_Z_MAX = -10.66, 13.75
+PLATFORM_TOP_Y = 2.036
+PASSENGER_FEET_Y = 2.156      # deck plus the 0.12 the Mixamo root sits above the lowest vertex
+PLATFORM_X = PLATFORM_X_MIN
+
+CARRIAGE_SIDE_X = -3.73       # where the carriage skin is, from the probe
+QUEUE_X = -6.0                # well inside the deck
+EDGE_X = -4.9                 # the last step still on the platform
+INSIDE_X = -3.2               # through the doorway, inside the carriage
+
+TRAIN_BODY_MAT = "bd5a2dc97bddbfb4bb14ebf097929d60"
+DOOR_Y = 3.04                 # panels span roughly deck height to 4.0
+DOOR_LOCAL_Z_WORLD = [-9.0, -3.0, 3.0, 9.0]   # all inside the platform z range
+
 
 SHOTS = [
     ("Cam_Station_A", (-9.8, 3.9, -14.0), (-4.6, 2.4, 2.0), True),
@@ -95,9 +111,13 @@ SHOTS = [
 FOLLOW_OFFSET = (0.0, 7.0, 52.0)
 FOLLOW_LOOKAT = (-2.0, 1.5, 78.0)
 
+# Spawn x and z, start delay, and which door they head for. Every spawn is inside the deck
+# bounds above.
 PASSENGERS = [
-    (-7.6, -19.0, 0.0), (-6.4, -15.0, 0.35), (-7.9, -10.0, 0.8), (-6.2, -6.0, 1.1),
-    (-7.4, -1.0, 0.4), (-6.6, 3.0, 1.6), (-7.8, 8.0, 2.1), (-6.5, 11.0, 1.3),
+    (-9.8, -8.0, 0.0, 0), (-7.4, -6.5, 0.5, 0),
+    (-10.4, -2.0, 0.9, 1), (-7.9, -0.5, 1.4, 1),
+    (-9.2, 4.5, 0.3, 2), (-7.1, 6.0, 1.8, 2),
+    (-10.1, 10.5, 2.2, 3), (-7.6, 12.0, 1.1, 3),
 ]
 
 STATION_KEEP = ("cement platform", "train  shellter", "mettle bench", "bench",
@@ -414,6 +434,76 @@ def box_trigger_block(a, go, size):
 """ % (go, f(size[0]), f(size[1]), f(size[2])))
 
 
+def point_light_block(a, go, colour, intensity=2.4, rng=6.0):
+    """A small point light on a signal lamp, so the change actually throws colour onto the pole
+    and the ballast rather than being a flat swap of albedo."""
+    return render(108, a, False, """Light:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: %d}
+  m_Enabled: 1
+  serializedVersion: 13
+  m_Type: 2
+  m_Color: {r: %s, g: %s, b: %s, a: 1}
+  m_Intensity: %s
+  m_Range: %s
+  m_SpotAngle: 30
+  m_InnerSpotAngle: 21.802082
+  m_CookieSize2D: {x: 10, y: 10}
+  m_Shadows:
+    m_Type: 0
+    m_Resolution: -1
+    m_CustomResolution: -1
+    m_Strength: 1
+    m_Bias: 0.05
+    m_NormalBias: 0.4
+    m_NearPlane: 0.2
+    m_CullingMatrixOverride:
+      e00: 1
+      e01: 0
+      e02: 0
+      e03: 0
+      e10: 0
+      e11: 1
+      e12: 0
+      e13: 0
+      e20: 0
+      e21: 0
+      e22: 1
+      e23: 0
+      e30: 0
+      e31: 0
+      e32: 0
+      e33: 1
+    m_UseCullingMatrixOverride: 0
+  m_Cookie: {fileID: 0}
+  m_DrawHalo: 0
+  m_Flare: {fileID: 0}
+  m_RenderMode: 0
+  m_CullingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_RenderingLayerMask: 1
+  m_Lightmapping: 4
+  m_LightShadowCasterMode: 0
+  m_AreaSize: {x: 1, y: 1}
+  m_BounceIntensity: 1
+  m_ColorTemperature: 6570
+  m_UseColorTemperature: 0
+  m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_UseBoundingSphereOverride: 0
+  m_UseViewFrustumForShadowCasterCull: 1
+  m_ForceVisible: 0
+  m_ShapeRadius: 0
+  m_ShadowAngle: 0
+  m_LightUnit: 1
+  m_LuxAtDistance: 1
+  m_EnableSpotReflector: 1
+""" % (go, f(colour[0]), f(colour[1]), f(colour[2]), f(intensity), f(rng)))
+
+
 def prefab_instance_block(a, guid, go_target, tr_target, name, pos, added=None,
                           tag=None, extra_mods=None):
     mods = []
@@ -518,6 +608,21 @@ def stripped_block(a, cid, kind, source, guid, instance):
   m_PrefabAsset: {fileID: 0}
 """ % (kind, source, guid, instance))
 
+
+WHEELS_FIELDS = '''  wheelNamePrefix: Wheel
+  wheelRadius: 0.45
+  spinAxis: {x: 1, y: 0, z: 0}
+  manualSpeed: 0'''
+
+AUDIO_FIELDS = '''  rumbleLoop: {fileID: 0}
+  brakeSqueal: {fileID: 0}
+  maxSpeed: 15
+  minPitch: 0.55
+  maxPitch: 1.25
+  maxVolume: 0.7
+  fadeSpeed: 2
+  squealVolume: 0.8
+  squealSpeedThreshold: 4'''
 
 # ---------------------------------------------------------------- scene model
 
@@ -632,6 +737,43 @@ LAMPS = [("Sphere", 0.37427998, MESH_SPHERE), ("Sphere (1)", -0.12572002, MESH_S
          ("Sphere (2)", -0.6257199, MESH_SPHERE)]
 
 
+def build_doors(sc, train_stop_z):
+    """Sliding doors on the carriage side.
+
+    The Polyeler carriage has no door geometry at all, so each boarding point gets a pair of
+    thin panels in the train's own body material, sat flush against the skin. They are what the
+    passengers walk into, which is what makes the boarding read as boarding."""
+    doors = []
+
+    for i, dz in enumerate(DOOR_LOCAL_Z_WORLD):
+        root_tr = sc.ids.new()
+        panels = []
+
+        for side, off in (("Left", -0.31), ("Right", 0.31)):
+            t, g = sc.ids.new(), sc.ids.new()
+            mf, mr = sc.ids.new(), sc.ids.new()
+            sc.add(go_block(g, side + " Panel", [t, mf, mr]))
+            sc.add(tr_block(t, g, (0.0, 0.0, off), [], root_tr,
+                            scale=(0.12, 2.0, 0.6)))
+            sc.add(mesh_filter_block(mf, g, MESH_CUBE))
+            sc.add(mesh_renderer_block(mr, g, TRAIN_BODY_MAT))
+            panels.append(t)
+
+        door_mb = sc.ids.new()
+        g = sc.ids.new()
+        sc.add(go_block(g, "Train Door %d" % (i + 1), [root_tr, door_mb]))
+        sc.add(tr_block(root_tr, g, (CARRIAGE_SIDE_X, DOOR_Y, dz), panels, 0))
+        sc.add(mono_block(door_mb, g, SCRIPTS["TrainDoor"], """  leftPanel: {fileID: %d}
+  rightPanel: {fileID: %d}
+  openOffset: 0.62
+  slideSpeed: 1.6
+  startOpen: 0""" % (panels[0], panels[1])))
+        sc.roots.append(root_tr)
+        doors.append(door_mb)
+
+    return doors
+
+
 def build_signal(sc, name, pos, red_on, yellow_on):
     """A clone of his signal group: pole, plate and three lamps."""
     tr = sc.ids.new()
@@ -646,13 +788,29 @@ def build_signal(sc, name, pos, red_on, yellow_on):
               (0.35476,) * 3, MESH_SPHERE, MAT_YELLOW, yellow_on),
              ("Sphere (2)", (0.32247972, -0.6257199, -0.027000427),
               (0.35476,) * 3, MESH_SPHERE, MAT_GREEN, False)]
+    LAMP_LIGHT = {"Sphere": (1.0, 0.15, 0.12),
+                  "Sphere (1)": (1.0, 0.85, 0.1),
+                  "Sphere (2)": (0.2, 1.0, 0.3)}
+
     for nm, lp, ls, mesh, mat, on in parts:
         t, g = sc.ids.new(), sc.ids.new()
         mf, mr = sc.ids.new(), sc.ids.new()
-        sc.add(go_block(g, nm, [t, mf, mr], active=on))
+        comps = [t, mf, mr]
+
+        # The lamps carry a light of their own. It switches with the lamp, so the change to
+        # green lights the pole and the ballast instead of only changing the sphere colour.
+        if nm in LAMP_LIGHT:
+            li = sc.ids.new()
+            comps.append(li)
+
+        sc.add(go_block(g, nm, comps, active=on))
         sc.add(tr_block(t, g, lp, [], tr, scale=ls))
         sc.add(mesh_filter_block(mf, g, mesh))
         sc.add(mesh_renderer_block(mr, g, mat))
+
+        if nm in LAMP_LIGHT:
+            sc.add(point_light_block(li, g, LAMP_LIGHT[nm]))
+
         kids.append(t)
         lamp_go[nm] = g
     g = sc.ids.new()
@@ -733,6 +891,10 @@ def hide_catenary_over_signal(sc, signal_z):
 
 def paint_his_signal(sc, red_on, yellow_on, green_on):
     """His signal lamps carry the default material; give them colours and states."""
+    LAMP_LIGHT = {"Sphere": (1.0, 0.15, 0.12),
+                  "Sphere (1)": (1.0, 0.85, 0.1),
+                  "Sphere (2)": (0.2, 1.0, 0.3)}
+
     for nm, mat, on in (("Sphere", MAT_RED, red_on),
                         ("Sphere (1)", MAT_YELLOW, yellow_on),
                         ("Sphere (2)", MAT_GREEN, green_on),
@@ -744,6 +906,13 @@ def paint_his_signal(sc, red_on, yellow_on, green_on):
         sc.set_material(g, mat)
         sc.set_active(g, on)
         sc.drop_collider(g)
+
+        # His station signal is the one the whole sequence turns on, so its lamps get lights
+        # too. They switch with the lamp, so green actually throws colour on the scene.
+        if nm in LAMP_LIGHT:
+            li = sc.ids.new()
+            sc.add(point_light_block(li, g, LAMP_LIGHT[nm]))
+            sc.add_component_to_go(g, li)
     return {n: sc.find_go(n) for n in ("Sphere", "Sphere (1)", "Sphere (2)")}
 
 
@@ -784,9 +953,12 @@ def build_scene1(his_guids):
     loader_id = sc.ids.new()
     rb_id = sc.ids.new()
     col_id = sc.ids.new()
+    wheels_id = sc.ids.new()
+    audio_id = sc.ids.new()
 
     patch_train_instance(sc, train_inst, TRAIN_START_Z,
-                         [rb_id, col_id, brake_id, loader_id], tag="Train")
+                         [rb_id, col_id, brake_id, loader_id, wheels_id, audio_id],
+                         tag="Train")
     sc.add(stripped_block(train_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, train_inst))
     sc.add(stripped_block(train_tr, 4, "Transform", TRAIN_TR, TRAIN_GUID, train_inst))
 
@@ -833,6 +1005,22 @@ def build_scene1(his_guids):
                        f(FOLLOW_LOOKAT[0]), f(FOLLOW_LOOKAT[1]), f(FOLLOW_LOOKAT[2]))))
     sc.add_component_to_go(cam_go, follow)
 
+    sc.add(mono_block(wheels_id, train_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
+    sc.add(mono_block(audio_id, train_go, SCRIPTS["TrainAudio"], AUDIO_FIELDS))
+
+    # The heads up display: without it the scene never tells the player to brake, and the
+    # outcome only reaches the console.
+    hud_tr, hud_go = add_empty(sc, "Scene1 HUD", (0, 0, 0))
+    hud_mb = sc.ids.new()
+    sc.add(mono_block(hud_mb, hud_go, SCRIPTS["Scene1Hud"], """  train: {fileID: %d}
+  stationStopWaypoint: {fileID: %d}
+  maxSpeed: 15
+  maxDeceleration: 5
+  promptLead: 30
+  arriveDistance: 0.6
+  restartKeyName: R""" % (train_tr, stop_tr)))
+    sc.add_component_to_go(hud_go, hud_mb)
+
     add_station(sc)
     sc.write(SCENE1_OUT)
     return sc
@@ -856,14 +1044,20 @@ def build_scene2(his_guids):
     train_inst = sc.prefab_instance_named("train")
     train_go, train_tr = sc.ids.new(), sc.ids.new()
     drive_id = sc.ids.new()
-    patch_train_instance(sc, train_inst, TRAIN_STOP_Z, [drive_id], tag="Train")
+    wheels_id = sc.ids.new()
+    audio_id = sc.ids.new()
+    patch_train_instance(sc, train_inst, TRAIN_STOP_Z,
+                         [drive_id, wheels_id, audio_id], tag="Train")
     sc.add(stripped_block(train_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, train_inst))
     sc.add(stripped_block(train_tr, 4, "Transform", TRAIN_TR, TRAIN_GUID, train_inst))
     sc.add(mono_block(drive_id, train_go, SCRIPTS["TrainSpaceDrive"], """  maxSpeed: 15
-  acceleration: 3
+  acceleration: 1.2
   deceleration: 5
   controlEnabled: 0
   startMoving: 0"""))
+
+    sc.add(mono_block(wheels_id, train_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
+    sc.add(mono_block(audio_id, train_go, SCRIPTS["TrainAudio"], AUDIO_FIELDS))
 
     # His Main Camera becomes the train camera: it already carries the audio listener.
     cam_go = sc.find_go("Main Camera")
@@ -904,17 +1098,25 @@ def build_scene2(his_guids):
         sc.roots.append(t)
         cams[name] = c
 
-    # Passengers and their paths.
-    for i, (sx, sz, delay) in enumerate(PASSENGERS):
-        door_z = TRAIN_STOP_Z + DOOR_LOCAL_Z[i % len(DOOR_LOCAL_Z)]
-        qt, qg = add_empty(sc, "Queue %d" % (i + 1), (PLATFORM_X + 1.4, PLATFORM_TOP_Y, door_z))
-        dt, dg = add_empty(sc, "Door %d" % (i + 1), (DOOR_LINE_X, PLATFORM_TOP_Y, door_z))
+    # Passengers and their paths. Every waypoint but the last sits on the platform deck; only
+    # the final step crosses the 1.07 unit gap into the carriage.
+    doors = build_doors(sc, TRAIN_STOP_Z)
+
+    for i, (sx, sz, delay, door_index) in enumerate(PASSENGERS):
+        door_z = DOOR_LOCAL_Z_WORLD[door_index]
+        qt, _ = add_empty(sc, "Queue %d" % (i + 1),
+                          (QUEUE_X, PASSENGER_FEET_Y, door_z))
+        et, _ = add_empty(sc, "Edge %d" % (i + 1),
+                          (EDGE_X, PASSENGER_FEET_Y, door_z))
+        dt, _ = add_empty(sc, "Board %d" % (i + 1),
+                          (INSIDE_X, PASSENGER_FEET_Y, door_z))
         walker = sc.ids.new()
+        variety = sc.ids.new()
         inst = sc.ids.new()
         sc.add(prefab_instance_block(
             inst, PERSON_GUID, PERSON_GO, PERSON_TR,
             "Passenger %d" % (i + 1),
-            (sx, PLATFORM_TOP_Y, sz), added=[walker],
+            (sx, PASSENGER_FEET_Y, sz), added=[walker, variety],
             extra_mods=[
                 (PERSON_ANIMATOR, "m_Controller", "",
                  "{fileID: 9100000, guid: %s, type: 2}" % PERSON_CONTROLLER),
@@ -927,18 +1129,28 @@ def build_scene2(his_guids):
         sc.add(mono_block(walker, pgo, SCRIPTS["PassengerWalker"], """  waypoints:
   - {fileID: %d}
   - {fileID: %d}
+  - {fileID: %d}
   moveSpeed: %s
   turnSpeed: 6
   startDelay: %s
   arriveDistance: 0.15
   deactivateOnArrival: 1
-  boardDelay: 0.2
+  boardDelay: 0.25
+  door: {fileID: %d}
   enableBoneWalk: 0
   stepFrequency: 2.2
   legSwingAngle: 26
   armSwingAngle: 16
   swingAxis: {x: 1, y: 0, z: 0}
-  bobHeight: 0.035""" % (qt, dt, f(1.25 + (i % 3) * 0.12), f(delay))))
+  bobHeight: 0.035""" % (qt, et, dt, f(1.1 + (i % 4) * 0.09), f(delay),
+                          doors[door_index])))
+
+        sc.add(mono_block(variety, pgo, SCRIPTS["PassengerVariety"], """  seed: %d
+  minScale: 0.94
+  maxScale: 1.06
+  tintClothing: 1
+  tintStrength: 0.35
+  offsetAnimator: 1""" % i))
 
     # Director.
     dt, dg = sc.ids.new(), sc.ids.new()
@@ -955,11 +1167,18 @@ def build_scene2(his_guids):
   lastSignalRedLight: {fileID: %d}
   lastSignalGreenLight: {fileID: %d}
   greenLightDelay: 10
+  trainDoors:
+%s
+  doorsCloseTime: 8.5
+  stationAmbience: {fileID: 0}
+  signalChange: {fileID: 0}
+  ambienceVolume: 0.35
   trainDrive: {fileID: %d}
   pressSpacePrompt: {fileID: 0}
   pressSpaceLabel: {fileID: 0}
   promptFadeSpeed: 2""" % (cams["Cam_Station_A"], cams["Cam_Station_B"], cams["Cam_Station_C"],
-                           cams["Cam_Train"], lamps["Sphere"], lamps["Sphere (2)"], drive_id)))
+                           cams["Cam_Train"], lamps["Sphere"], lamps["Sphere (2)"],
+        "\n".join("  - {fileID: %d}" % d for d in doors), drive_id)))
     sc.roots.append(dt)
 
     add_station(sc)

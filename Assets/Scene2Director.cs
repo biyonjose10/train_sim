@@ -26,6 +26,15 @@ public class Scene2Director : MonoBehaviour
     public GameObject lastSignalGreenLight;     // Green sphere of the last signal
     public float greenLightDelay = 10f;
 
+    [Header("Doors")]
+    public TrainDoor[] trainDoors;
+    public float doorsCloseTime = 8.5f;
+
+    [Header("Audio")]
+    public AudioClip stationAmbience;
+    public AudioClip signalChange;
+    public float ambienceVolume = 0.35f;
+
     [Header("Handover")]
     public TrainSpaceDrive trainDrive;
     public CanvasGroup pressSpacePrompt;
@@ -37,6 +46,7 @@ public class Scene2Director : MonoBehaviour
     private int currentShot = -1;
 
     private bool hasCutToTrain = false;
+    private bool doorsClosed = false;
     private bool signalIsGreen = false;
     private bool promptDismissed = false;
 
@@ -67,6 +77,9 @@ public class Scene2Director : MonoBehaviour
         {
             pressSpacePrompt.alpha = 0f;
         }
+
+        OpenDoors();
+        StartAmbience();
 
         ShowShot(0);
 
@@ -106,6 +119,17 @@ public class Scene2Director : MonoBehaviour
         }
 
         // ==========================================
+        // DOORS
+        // ==========================================
+
+        // Shut before the signal clears, so the train is not pulling away with them open.
+        if (!doorsClosed && timer >= doorsCloseTime)
+        {
+            doorsClosed = true;
+            CloseDoors();
+        }
+
+        // ==========================================
         // LAST SIGNAL TURNS GREEN
         // ==========================================
 
@@ -120,6 +144,59 @@ public class Scene2Director : MonoBehaviour
         // ==========================================
 
         UpdatePrompt();
+    }
+
+    // ==============================================
+    // DOORS AND AMBIENCE
+    // ==============================================
+
+    private void OpenDoors()
+    {
+        if (trainDoors == null)
+        {
+            return;
+        }
+
+        foreach (TrainDoor door in trainDoors)
+        {
+            if (door != null)
+            {
+                door.Open();
+            }
+        }
+    }
+
+    private void CloseDoors()
+    {
+        if (trainDoors == null)
+        {
+            return;
+        }
+
+        foreach (TrainDoor door in trainDoors)
+        {
+            if (door != null)
+            {
+                door.Close();
+            }
+        }
+
+        Debug.Log("[SCENE 2] Doors closing, boarding is over.");
+    }
+
+    private void StartAmbience()
+    {
+        if (stationAmbience == null)
+        {
+            return;
+        }
+
+        AudioSource source = gameObject.AddComponent<AudioSource>();
+        source.clip = stationAmbience;
+        source.loop = true;
+        source.volume = ambienceVolume;
+        source.spatialBlend = 0f;
+        source.Play();
     }
 
     // ==============================================
@@ -202,6 +279,16 @@ public class Scene2Director : MonoBehaviour
         if (pressSpaceLabel != null)
         {
             pressSpaceLabel.text = "PRESS SPACE TO GO";
+        }
+
+        if (signalChange != null && trainDrive != null)
+        {
+            TrainAudio audio = trainDrive.GetComponent<TrainAudio>();
+
+            if (audio != null)
+            {
+                audio.PlayOneShot(signalChange, 0.9f);
+            }
         }
 
         Debug.Log(
