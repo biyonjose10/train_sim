@@ -1058,6 +1058,7 @@ def build_scene1(his_guids):
     sc.add_component_to_go(hud_go, hud_mb)
 
     add_station(sc)
+    add_north_world(sc, drive_second_train=False)
     sc.write(SCENE1_OUT)
     return sc
 
@@ -1223,6 +1224,7 @@ def build_scene2(his_guids):
     sc.roots.append(dt)
 
     add_station(sc)
+    add_north_world(sc, drive_second_train=False)
     sc.write(SCENE2_OUT)
     return sc
 
@@ -1385,49 +1387,48 @@ def add_north_terrain(sc):
     sc.roots.append(remap[1294392834])
 
 
-def build_scene3(his_guids):
-    sc = Scene(SCENE1_SRC, pristine_scene1())
+def add_north_world(sc, drive_second_train):
+    """Everything beyond the tunnel that scene 3 is played in: the ground, the rails running on,
+    the crossover and its signal, and the dark red train waiting on our line.
 
-    # The station behind us looks the way it did when we left: signals red.
-    paint_his_signal(sc, red_on=True, yellow_on=False, green_on=False)
-    build_signal(sc, "Signal 1 (approach)", APPROACH_SIGNAL_POS, red_on=True, yellow_on=False)
+    All three scenes carry it, so that the world through the tunnel is the same one whichever
+    scene the player is in when they look, or drive, through it. Only scene 3 gives the red train
+    its follower; elsewhere it just stands there, which is what it is doing until scene 3.
 
+    Returns the TrainPathFollower's fileID, or None."""
     # His curve piece sits 1.83 above the line and across the west track exactly where the
-    # crossover and the waiting train go, so it cannot stay in this scene.
-    remove_prefab_instance(sc, "Rail.L (1)")
+    # crossover and the waiting train go, so it cannot stay.
+    if sc.prefab_instance_named("Rail.L (1)") is not None:
+        remove_prefab_instance(sc, "Rail.L (1)")
     add_rail_pieces(sc, "Straight rail (2)", EXTRA_RAIL_Z)
 
     # The crossover signal, on the same side of the line as his station signal.
     signal_pos = (APPROACH_SIGNAL_POS[0], APPROACH_SIGNAL_POS[1], SCENE3_SIGNAL_Z + 1.0)
     build_signal(sc, "Crossover Signal", signal_pos, red_on=True, yellow_on=False)
     hide_catenary_over_signal(sc, signal_pos[2])
-    # The camera rides at gantry height, and on the stretch where the player is braking one of
-    # them fills the screen at exactly the wrong moment.
+    # The camera rides at gantry height, and on the stretch where the player brakes in scene 3
+    # one of them fills the screen at exactly the wrong moment.
     hide_catenary_over_signal(sc, SCENE3_BRAKING_Z)
     build_crossover(sc)
 
-    # Our train, straight out of the tunnel. The director drives it.
-    train_inst = sc.prefab_instance_named("train")
-    train_go, train_tr = sc.ids.new(), sc.ids.new()
-    wheels_id, audio_id = sc.ids.new(), sc.ids.new()
-    patch_train_instance(sc, train_inst, SCENE3_PLAYER_START_Z, [wheels_id, audio_id], tag="Train")
-    sc.add(stripped_block(train_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, train_inst))
-    sc.add(stripped_block(train_tr, 4, "Transform", TRAIN_TR, TRAIN_GUID, train_inst))
-    sc.add(mono_block(wheels_id, train_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
-    sc.add(mono_block(audio_id, train_go, SCRIPTS["TrainAudio"], AUDIO_FIELDS))
-
     # The second train: his train again, turned to face the station and painted dark red.
     red_inst = sc.ids.new()
-    follower_id, tint_id, red_wheels_id = sc.ids.new(), sc.ids.new(), sc.ids.new()
+    tint_id = sc.ids.new()
+    follower_id = sc.ids.new() if drive_second_train else None
+    red_wheels_id = sc.ids.new() if drive_second_train else None
+    added = [c for c in (follower_id, tint_id, red_wheels_id) if c is not None]
     sc.add(prefab_instance_block(
         red_inst, TRAIN_GUID, TRAIN_GO, TRAIN_TR, "Second Train",
-        (TRAIN_X, TRAIN_Y, SECOND_TRAIN_START_Z),
-        added=[follower_id, tint_id, red_wheels_id],
+        (TRAIN_X, TRAIN_Y, SECOND_TRAIN_START_Z), added=added,
         rot=(0, 1, 0, 0), euler=(0, 180, 0)))
     sc.roots.append(red_inst)
     red_go = sc.ids.new()
     sc.add(stripped_block(red_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, red_inst))
-    sc.add(mono_block(follower_id, red_go, SCRIPTS["TrainPathFollower"], """  westX: %s
+    sc.add(mono_block(tint_id, red_go, SCRIPTS["TrainTint"], """  materialName: Body
+  tint: {r: 0.55, g: 0.08, b: 0.07, a: 1}"""))
+
+    if drive_second_train:
+        sc.add(mono_block(follower_id, red_go, SCRIPTS["TrainPathFollower"], """  westX: %s
   eastX: %s
   trackY: %s
   crossStartZ: %s
@@ -1438,9 +1439,44 @@ def build_scene3(his_guids):
   acceleration: 3
   deceleration: 3""" % (f(TRAIN_X), f(EAST_X), f(TRAIN_Y), f(CROSS_START_Z), f(CROSS_END_Z),
                         f(SECOND_TRAIN_START_Z), f(SECOND_TRAIN_STOP_Z))))
-    sc.add(mono_block(tint_id, red_go, SCRIPTS["TrainTint"], """  materialName: Body
-  tint: {r: 0.55, g: 0.08, b: 0.07, a: 1}"""))
-    sc.add(mono_block(red_wheels_id, red_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
+        sc.add(mono_block(red_wheels_id, red_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
+
+    add_north_terrain(sc)
+    return follower_id
+
+
+def add_north_world_to_scene1():
+    """Adds the scene 3 world to the committed scene 1 file in place.
+
+    Scene 1 is not regenerated by default, because it carries editor edits the generator does not
+    know about (commit 0046853). So this patches the file on disk instead, and does nothing if the
+    world is already there."""
+    sc = Scene(SCENE1_OUT)
+    if sc.find_go("Crossover") is not None:
+        return False
+    add_north_world(sc, drive_second_train=False)
+    sc.write(SCENE1_OUT)
+    return True
+
+
+def build_scene3(his_guids):
+    sc = Scene(SCENE1_SRC, pristine_scene1())
+
+    # The station behind us looks the way it did when we left: signals red.
+    paint_his_signal(sc, red_on=True, yellow_on=False, green_on=False)
+    build_signal(sc, "Signal 1 (approach)", APPROACH_SIGNAL_POS, red_on=True, yellow_on=False)
+
+    follower_id = add_north_world(sc, drive_second_train=True)
+
+    # Our train, straight out of the tunnel. The director drives it.
+    train_inst = sc.prefab_instance_named("train")
+    train_go, train_tr = sc.ids.new(), sc.ids.new()
+    wheels_id, audio_id = sc.ids.new(), sc.ids.new()
+    patch_train_instance(sc, train_inst, SCENE3_PLAYER_START_Z, [wheels_id, audio_id], tag="Train")
+    sc.add(stripped_block(train_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, train_inst))
+    sc.add(stripped_block(train_tr, 4, "Transform", TRAIN_TR, TRAIN_GUID, train_inst))
+    sc.add(mono_block(wheels_id, train_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
+    sc.add(mono_block(audio_id, train_go, SCRIPTS["TrainAudio"], AUDIO_FIELDS))
 
     # His Main Camera follows our train, exactly as in scene 1.
     cam_go = sc.find_go("Main Camera")
@@ -1500,7 +1536,6 @@ def build_scene3(his_guids):
     sc.roots.append(dt)
 
     add_station(sc)
-    add_north_terrain(sc)
     sc.write(SCENE3_OUT)
 
     meta = SCENE3_OUT + ".meta"
@@ -1565,4 +1600,5 @@ if __name__ == "__main__":
         s1 = build_scene1(g)
         print("scene 1 written:", SCENE1_OUT)
     else:
-        print("scene 1 left alone (pass --scene1 to rebuild it and lose the 0046853 edits)")
+        print("scene 1 not rebuilt (pass --scene1 to rebuild it and lose the 0046853 edits);",
+              "scene 3 world patched into it:", add_north_world_to_scene1())
