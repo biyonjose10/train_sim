@@ -243,6 +243,10 @@ git reset --hard working-v1   # back to a known good state
   yet, and like the others it is not yet verified in 6000.4.6f1.
 - Scene 3 drops the curved rail piece `Rail.L (1)` that his scene places just past the tunnel. It
   sits 1.83 above the line, right across where the crossover and the waiting train go.
+- The world past the tunnel (ground, crossover, signal, waiting red train) is in all three scenes,
+  so it is already there whenever you drive through. The tunnel was extended with a second tube
+  section to a proper north portal at z 111, and the hill filled in over it. That last change was
+  checked by screenshots, not by a scripted play-through.
 - The pack terrain ends just past the tunnel, so scene 3 stands on a second terrain built from the
   pack's own ground layers, trees and grass. The red train is painted at runtime (`TrainTint`), so
   it looks grey in the editor until you press Play.
