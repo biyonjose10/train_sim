@@ -1387,6 +1387,33 @@ def add_north_terrain(sc):
     sc.roots.append(remap[1294392834])
 
 
+NORTH_TUNNEL_Z = 95.0   # second tube section, z 79..111; its north rim is the new portal
+
+
+def add_tunnel_extension(sc):
+    """The pack's tunnel tube is 32 long and stopped at z 79, halfway through the hill, which left
+    the rest of the hill as an open trench. A second section, cloned from the pack scene's own
+    instance so scale and rotation match, carries the tunnel on to a portal at z 111.
+    Tools > Train Sim > Build Scene 3 Ground buries it and shapes the cutting outside."""
+    if sc.prefab_instance_named("train tunnel (north)") is not None:
+        return False
+    _, blocks = split_blocks(open(PACK, encoding="utf-8").read())
+    for cid, a, s, body in blocks:
+        if cid != 1001:
+            continue
+        nm = re.search(r"propertyPath: m_Name\n\s+value: (.*)", body)
+        if not nm or nm.group(1).strip() != "train tunnel":
+            continue
+        body = re.sub(r"(propertyPath: m_Name\n\s+value: ).*", r"\g<1>train tunnel (north)", body)
+        body = re.sub(r"(propertyPath: m_LocalPosition\.z\n\s+value: )\S+", r"\g<1>" + f(NORTH_TUNNEL_Z),
+                      body)
+        new = sc.ids.new()
+        sc.add(render(1001, new, False, body))
+        sc.roots.append(new)
+        return True
+    raise SystemExit("no 'train tunnel' instance in the pack scene")
+
+
 def add_north_world(sc, drive_second_train):
     """Everything beyond the tunnel that scene 3 is played in: the ground, the rails running on,
     the crossover and its signal, and the dark red train waiting on our line.
@@ -1396,6 +1423,8 @@ def add_north_world(sc, drive_second_train):
     its follower; elsewhere it just stands there, which is what it is doing until scene 3.
 
     Returns the TrainPathFollower's fileID, or None."""
+    add_tunnel_extension(sc)
+
     # His curve piece sits 1.83 above the line and across the west track exactly where the
     # crossover and the waiting train go, so it cannot stay.
     if sc.prefab_instance_named("Rail.L (1)") is not None:
@@ -1453,8 +1482,11 @@ def add_north_world_to_scene1():
     world is already there."""
     sc = Scene(SCENE1_OUT)
     if sc.find_go("Crossover") is not None:
-        return False
-    add_north_world(sc, drive_second_train=False)
+        # Already carries the world; it may still predate the tunnel extension.
+        if not add_tunnel_extension(sc):
+            return False
+    else:
+        add_north_world(sc, drive_second_train=False)
     sc.write(SCENE1_OUT)
     return True
 

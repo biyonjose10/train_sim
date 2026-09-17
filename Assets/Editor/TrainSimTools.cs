@@ -117,7 +117,9 @@ namespace TrainSim.SceneBuilding
         // The bore runs along the track at x = 0, through the hill the pack put at z = 63.
         const float TunnelHalfWidth = 5f;
         const float TunnelStartZ = 44f;
-        const float TunnelEndZ = 96f;
+        // Ends where the tube does. North of z 79 the hill is filled back in over a second tube
+        // section instead (CoverTunnelInPackHill), so carving further would reopen the trench.
+        const float TunnelEndZ = 79f;
 
         /// <summary>
         /// Punches a hole through the terrain along the track so the hill becomes a tunnel the
@@ -210,8 +212,110 @@ namespace TrainSim.SceneBuilding
         // nothing but sky under the rails, so this continues the ground for another 400 units.
         static readonly Vector3 NorthTerrainOrigin = new Vector3(-101f, 0f, 97.9f);
         static readonly Vector3 NorthTerrainSize = new Vector3(200f, 600f, 400f);
-        const float HillFadeLength = 30f;       // the tunnel hill runs off the pack terrain's edge
+        const float HillFadeLength = 24f;       // how far the hill's shoulders run past the portal
         const float TreeClearance = 12f;        // keep the line clear so the second train is visible
+
+        // The pack's tunnel tube only ran from z 47 to 79; north of that the hill was an open
+        // trench. The generator adds a second tube section centred on z 95 (Tools/generate_scenes.py,
+        // NORTH_TUNNEL_Z), so the tunnel now ends in a proper portal here.
+        const float TubeStartZ = 79f;
+        const float NorthPortalZ = 111f;
+        const float TubeRoofY = 11.6f;          // top of the tube shell at the pack's 1.53 scale
+        const float CoverHeight = 13f;          // ground over the roof, so the shell never shows
+        const float CoverHalfWidth = 11.5f;     // the shell is 20 wide
+        const float CuttingHalfWidth = 10.6f;   // the portal rim is 20 wide; flat ground in front of it
+        // The step down to the cutting sits just behind the rim, so the rim hides it everywhere
+        // except through the opening, which is all that gets cut out. Around the rim's slanted
+        // shoulders the hill then shows, rather than sky.
+        const float PortalSetBack = 1.2f;
+        const float PortalOpeningHalfWidth = 8.3f;
+
+        /// <summary>Height the hill must reach at this x to bury the tube, fading off its sides.</summary>
+        static float TunnelCover(float worldX)
+        {
+            float ax = Mathf.Abs(worldX);
+            return CoverHeight * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(CoverHalfWidth, CoverHalfWidth + 16f, ax)));
+        }
+
+        /// <summary>
+        /// Closes the pack hill's open trench between the end of its tube and its north edge: fills
+        /// the carved hole back in there and raises the ground over the tube, so the extra section
+        /// runs under the hill instead of along a cut. The hole over the original tube, south of
+        /// z 79, is left exactly as it was. Idempotent.
+        /// </summary>
+        static void CoverTunnelInPackHill(TerrainData stage)
+        {
+            Vector3 origin = new Vector3(-101f, 0f, -102.1f);     // the pack terrain, in every scene
+            Vector3 size = stage.size;
+
+            int res = stage.heightmapResolution;
+            float[,] heights = stage.GetHeights(0, 0, res, res);
+            bool changed = false;
+
+            for (int zi = 0; zi < res; zi++)
+            {
+                float worldZ = origin.z + zi / (float)(res - 1) * size.z;
+
+                if (worldZ < TubeStartZ)
+                {
+                    continue;
+                }
+
+                for (int xi = 0; xi < res; xi++)
+                {
+                    float worldX = origin.x + xi / (float)(res - 1) * size.x;
+                    float cover = TunnelCover(worldX) / size.y;
+
+                    if (heights[zi, xi] < cover - 0.00001f)
+                    {
+                        heights[zi, xi] = cover;
+                        changed = true;
+                    }
+                }
+            }
+
+            int holeRes = stage.holesResolution;
+            bool[,] holes = stage.GetHoles(0, 0, holeRes, holeRes);
+
+            for (int y = 0; y < holeRes; y++)
+            {
+                float worldZ = origin.z + y / (float)(holeRes - 1) * size.z;
+
+                if (worldZ < TubeStartZ)
+                {
+                    continue;
+                }
+
+                for (int x = 0; x < holeRes; x++)
+                {
+                    if (!holes[y, x])
+                    {
+                        holes[y, x] = true;         // true means solid ground
+                        changed = true;
+                    }
+                }
+            }
+
+            if (!changed)
+            {
+                Debug.Log("[TRAIN SIM] Pack hill already covers the tunnel.");
+                return;
+            }
+
+            stage.SetHeights(0, 0, heights);
+            stage.SetHoles(0, 0, holes);
+
+            // Trees keep a stored height; put them back on the ground that moved under them.
+            stage.SetTreeInstances(stage.treeInstances, true);
+
+            EditorUtility.SetDirty(stage);
+            AssetDatabase.SaveAssets();
+
+            Debug.Log(
+                "[TRAIN SIM] Covered the tunnel in the pack hill from z " + TubeStartZ +
+                " to its north edge."
+            );
+        }
 
         /// <summary>
         /// Builds the terrain scene 3 stands on and saves it as an asset for the generator to use.
@@ -234,6 +338,10 @@ namespace TrainSim.SceneBuilding
                 return;
             }
 
+            // The pack hill first: close its open trench over the new tube section. The edge row
+            // this terrain copies below then already carries the cover.
+            CoverTunnelInPackHill(stage);
+
             var data = new TerrainData();
             data.heightmapResolution = 513;
             data.size = NorthTerrainSize;
@@ -242,44 +350,67 @@ namespace TrainSim.SceneBuilding
 
             int res = data.heightmapResolution;
             var heights = new float[res, res];
-            var holes = new bool[res - 1, res - 1];
             var random = new System.Random(20260917);
 
             for (int zi = 0; zi < res; zi++)
             {
                 float worldZ = NorthTerrainOrigin.z + zi / (float)(res - 1) * NorthTerrainSize.z;
-                float fade = 1f - Mathf.SmoothStep(0f, 1f, (worldZ - NorthTerrainOrigin.z) / HillFadeLength);
+
+                // Past the portal the hill falls away over HillFadeLength...
+                float fade = 1f - Mathf.SmoothStep(0f, 1f, (worldZ - NorthPortalZ) / HillFadeLength);
 
                 for (int xi = 0; xi < res; xi++)
                 {
                     float u = xi / (float)(res - 1);
                     float worldX = NorthTerrainOrigin.x + u * NorthTerrainSize.x;
+                    float ax = Mathf.Abs(worldX);
 
-                    // The pack terrain's own height along its north edge, carried on and eased out.
-                    float edge = stage.GetInterpolatedHeight(u, 1f);
+                    // The pack terrain's own height along its north edge, carried on, and never
+                    // lower than the cover over the tube.
+                    float hill = Mathf.Max(stage.GetInterpolatedHeight(u, 1f), TunnelCover(worldX));
+
+                    float h;
+
+                    if (worldZ <= NorthPortalZ - PortalSetBack)
+                    {
+                        h = hill;
+                    }
+                    else
+                    {
+                        // ...and the line runs out through a cutting: flat where the track is,
+                        // with the hill's shoulders sloping down either side of the portal.
+                        float cutting = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(CuttingHalfWidth, CuttingHalfWidth + 9f, ax));
+                        h = hill * fade * cutting;
+                    }
 
                     // Low rolling ground well away from the line, so the far side is not a table top.
-                    float away = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(35f, 75f, Mathf.Abs(worldX)));
+                    float away = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(35f, 75f, ax));
                     float rolling = Mathf.PerlinNoise(worldX * 0.018f + 3.7f, worldZ * 0.018f + 1.3f) * 16f * away;
 
-                    heights[zi, xi] = (edge * fade + rolling) / NorthTerrainSize.y;
+                    heights[zi, xi] = (h + rolling) / NorthTerrainSize.y;
                 }
             }
 
             data.SetHeights(0, 0, heights);
 
-            // Carry the tunnel cut through the part of the hill that spills onto this terrain.
-            for (int y = 0; y < res - 1; y++)
+            // The step from the ground over the roof down to the cutting would otherwise be a
+            // steep terrain face standing right in front of the portal, hiding it. Cut out the
+            // cells that make that face, back to just inside the rim; nothing shows through the
+            // gap, because the rim and the tube fill it.
+            int holeRes = res - 1;
+            var holes = new bool[holeRes, holeRes];
+            float cell = NorthTerrainSize.z / holeRes;
+
+            for (int y = 0; y < holeRes; y++)
             {
-                float worldZ = NorthTerrainOrigin.z + y / (float)(res - 2) * NorthTerrainSize.z;
+                float z0 = NorthTerrainOrigin.z + y * cell;
+                float z1 = z0 + cell;
+                bool atPortal = z1 > NorthPortalZ - PortalSetBack - 1.6f && z0 < NorthPortalZ;
 
-                for (int x = 0; x < res - 1; x++)
+                for (int x = 0; x < holeRes; x++)
                 {
-                    float worldX = NorthTerrainOrigin.x + x / (float)(res - 2) * NorthTerrainSize.x;
-                    bool inCut = Mathf.Abs(worldX) <= TunnelHalfWidth &&
-                                 worldZ <= NorthTerrainOrigin.z + HillFadeLength;
-
-                    holes[y, x] = !inCut;   // true means solid ground
+                    float worldX = NorthTerrainOrigin.x + (x + 0.5f) * (NorthTerrainSize.x / holeRes);
+                    holes[y, x] = !(atPortal && Mathf.Abs(worldX) < PortalOpeningHalfWidth);  // true = ground
                 }
             }
 
