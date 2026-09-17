@@ -1,9 +1,11 @@
 # Train Sim
 
-A two-chapter train simulation. You drive a train into a rural station, brake it at the platform in
-front of a red signal, watch the passengers board, and pull away when the signal clears.
+A three-chapter train simulation. You drive a train into a rural station, brake it at the platform in
+front of a red signal, watch the passengers board, and pull away when the signal clears. Through the
+tunnel you stop at a red signal to let a second train cross over and pass you, and follow it back
+to the station.
 
-Chapter 1 runs straight into chapter 2 — **you only ever open scene 1 and press Play.**
+Each chapter runs straight into the next — **you only ever open scene 1 and press Play.**
 
 ---
 
@@ -12,10 +14,12 @@ Chapter 1 runs straight into chapter 2 — **you only ever open scene 1 and pres
 Grab the latest **Release** from the repo, unzip it, and double-click **`TrainSim.exe`**.
 
 That is the whole thing. No Unity install, no editor version to match, no scenes to open, no Build
-Settings. It boots straight into chapter 1, and chapter 2 loads by itself when you stop the train.
+Settings. It boots straight into chapter 1, chapter 2 loads by itself when you stop the train, and
+chapter 3 loads as you come out of the tunnel.
 
-**Controls:** **Space** to brake, then **Space** again to pull away once the signal turns green.
-**R** restarts if you overshoot the station. **Alt+F4** or **Esc** to quit.
+**Controls:** **Space** to brake, then **Space** again to pull away once the signal turns green, and
+**Space** to stop at the signal past the tunnel. **R** retries a chapter you failed and replays from
+the start at the end. **Alt+F4**, or **Esc** at the end, to quit.
 
 The rest of this README is only for working on the project in Unity.
 
@@ -86,14 +90,16 @@ once you are working.
 - **Project** panel → `Assets` → `Scenes` → double-click **`SampleScene`**, or
 - menu bar → **Tools → Train Sim → Open Scene 1**
 
-Scene 2 loads by itself when the train stops. You do not open it manually.
+Scene 2 loads by itself when the train stops, and scene 3 when it clears the tunnel. You do not open
+either manually.
 
 ### Controls
 
 | Key | Does |
 |---|---|
-| **Space** | Brake on the run in; then start and stop the train after the signal clears |
-| **R** | Restart scene 1 after you overshoot the station |
+| **Space** | Brake on the run in; then start and stop the train after the signal clears; then stop at the crossover signal |
+| **R** | Retry scene 1 or 3 after passing a signal; replay from scene 1 at the end |
+| **Esc** | Quit, on the end card |
 
 ### What should happen
 
@@ -108,9 +114,19 @@ Scene 2 loads by itself when the train stops. You do not open it manually.
 5. At **9 seconds** the camera cuts back to the train with the red signal in frame. The doors
    close at 8.5 seconds, just before.
 6. At **10 seconds** the signal turns **green** and **PRESS SPACE TO GO** appears.
-7. Press **space** and the train pulls away toward the tunnel. That is the end of chapter 2.
+7. Press **space** and the train pulls away toward the tunnel.
+8. As the train comes out of the tunnel, scene 3 loads at the same speed. Ahead is a red signal, a
+   crossover, and a **dark red train** waiting on your line facing you.
+9. **PRESS SPACE TO STOP** appears with a distance readout, as in scene 1. Stop short of the signal
+   and `STOPPED AT THE SIGNAL` appears. Run past it and you get `YOU PASSED THE SIGNAL`; the train
+   brakes by itself well short of the points, and **R** retries scene 3.
+10. The moment you are stopped the red train sets off. A second later the camera cuts to it: it
+    crosses onto the other line, runs past you and back through the tunnel.
+11. As it reaches the station the camera cuts to the north end of the far platform, the train stops
+    alongside it, and **THE END** appears. **R** replays from scene 1, **Esc** quits.
 
-The Console logs every beat (`[HUD]`, `[CAMERA]`, `[SIGNAL]`, `[DOOR]`), which is the quickest way
+The Console logs every beat (`[HUD]`, `[CAMERA]`, `[SIGNAL]`, `[DOOR]`, `[SCENE 3]`,
+`[RED TRAIN]`), which is the quickest way
 to confirm the sequence is running correctly.
 
 ---
@@ -136,8 +152,12 @@ Package resolution has not finished or has failed. Click **Ignore**, let it fini
 restart the editor. If it persists you are almost certainly on the wrong Unity version.
 
 **The scenes are not in the build.**
-Run **Tools → Train Sim → Add Scenes To Build Settings**. Scene 1 cannot load scene 2 unless both
-are listed.
+Run **Tools → Train Sim → Add Scenes To Build Settings**. Scene 1 cannot load scene 2, nor scene 2
+load scene 3, unless all three are listed.
+
+**Scene 3 has no ground, just sky under the rails.**
+`Assets/Scenes/Scene3_NorthTerrain.asset` is missing. Run **Tools → Train Sim → Build Scene 3
+Ground** to recreate it; it is deterministic, so you get the same ground and trees back.
 
 ---
 
@@ -149,8 +169,10 @@ Everything lives under **Tools → Train Sim**:
 |---|---|
 | **Open Scene 1** | The playable chapter. This is the one you want |
 | **Open Scene 2** | The boarding sequence on its own, for editing it in isolation |
-| **Open Both Scenes (inspect only)** | Loads both together to compare. **Do not press Play** |
-| **Add Scenes To Build Settings** | Registers both scenes |
+| **Open Scene 3** | The crossover on its own. Playing it directly starts at full speed |
+| **Open Both Scenes (inspect only)** | Loads scenes 1 and 2 together to compare. **Do not press Play** |
+| **Add Scenes To Build Settings** | Registers all three scenes |
+| **Build Scene 3 Ground** | Rebuilds the terrain north of the tunnel. Already applied |
 | **Probe Layout** | Prints real mesh bounds and the platform extent |
 | **Carve Tunnel Through Terrain** | Cuts the bore through the hill. Already applied |
 | **Set Up Passenger Model** | Re-imports the Mixamo character and rebuilds its animator |
@@ -160,14 +182,24 @@ Everything lives under **Tools → Train Sim**:
 
 ## How the scenes are made
 
-Both `.unity` files are **generated**, not hand-authored. `Tools/generate_scenes.py` builds them
-from your teammate's original `SampleScene`, which is how the lighting, skybox, rails, directional
-light and signal stay exactly his.
+All three `.unity` files are **generated**, not hand-authored. `Tools/generate_scenes.py` builds
+them from your teammate's original `SampleScene`, which is how the lighting, skybox, rails,
+directional light and signal stay exactly his.
 
 ```bash
-python Tools/generate_scenes.py                              # rebuild both scenes
-python Tools/validate_scene.py Assets/Scenes/SampleScene.unity   # structural check
+python Tools/generate_scenes.py            # rebuild scenes 2 and 3
+python Tools/generate_scenes.py --scene1   # also rebuild scene 1 -- see the warning below
+python Tools/validate_scene.py Assets/Scenes/Scene3_Crossover.unity   # structural check
 ```
+
+> **Scene 1 is not rebuilt by default.** Commit `0046853` edited it in the editor (Signal 1's pole,
+> housing and yellow lamp removed, the train started further back) and those edits were never
+> folded into the generator, so `--scene1` would silently undo them.
+
+Scene 3's layout (signal at z 187, crossover z 195–245, the red train's start and stop) is in the
+`scene 3 layout` block of the generator. The crossover is an S-bend laid from primitive rails and
+sleepers, because the pack's curve pieces are 90° bends; `TrainPathFollower.cs` drives each car of
+the red train along the same formula, so if you change one, change both.
 
 The generator always reads his scene from git (`origin/main`), never from the file on disk, so
 re-running it never layers changes on top of a scene it already changed. Layout numbers live in the
@@ -206,3 +238,11 @@ git reset --hard working-v1   # back to a known good state
 - The Mixamo FBX is 50 MB because it embeds full-resolution textures, which is over half the repo.
 - The door panel sizes were estimated from the carriage bounds rather than matched to the model's
   window positions.
+- **Scene 3** was played end to end in 6000.0.83f1 by a scripted run (scene 2 into scene 3, both
+  the stop and the fail path), with screenshots checked at each beat. Nobody has played it by hand
+  yet, and like the others it is not yet verified in 6000.4.6f1.
+- Scene 3 drops the curved rail piece `Rail.L (1)` that his scene places just past the tunnel. It
+  sits 1.83 above the line, right across where the crossover and the waiting train go.
+- The pack terrain ends just past the tunnel, so scene 3 stands on a second terrain built from the
+  pack's own ground layers, trees and grass. The red train is painted at runtime (`TrainTint`), so
+  it looks grey in the editor until you press Play.

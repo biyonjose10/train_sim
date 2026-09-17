@@ -26,6 +26,7 @@ REPO = r"C:\Users\biyon\projects\train_sim"
 SCENE1_SRC = os.path.join(REPO, "Assets", "Scenes", "SampleScene.unity")
 SCENE1_OUT = SCENE1_SRC
 SCENE2_OUT = os.path.join(REPO, "Assets", "Scenes", "Scene2_StationBoarding.unity")
+SCENE3_OUT = os.path.join(REPO, "Assets", "Scenes", "Scene3_Crossover.unity")
 PACK = os.path.join(REPO, "Assets", "pixel horror abandoned rural  train station",
                     "Scenes", "environment with station.unity")
 
@@ -63,7 +64,8 @@ MAT_GREEN = guid_for("Assets/Materials/Signal Green.mat")
 SCRIPTS = {n: guid_for("Assets/" + n + ".cs") for n in
            ("Scene2Director", "PassengerWalker", "TrainSpaceDrive",
             "TrainFollowCamera", "ArriveAtStationLoader",
-            "TrainDoor", "TrainWheels", "PassengerVariety", "TrainAudio", "Scene1Hud")}
+            "TrainDoor", "TrainWheels", "PassengerVariety", "TrainAudio", "Scene1Hud",
+            "Scene3Director", "TrainPathFollower", "TrainTint", "TunnelExitLoader")}
 # His two scripts keep their own guids.
 SCRIPTS["TrainStationButtonStop"] = None   # filled in from the meta at run time
 SCRIPTS["Signal1Trigger"] = None
@@ -119,6 +121,40 @@ PASSENGERS = [
     (-9.2, 4.5, 0.3, 2), (-7.1, 6.0, 1.8, 2),
     (-10.1, 10.5, 2.2, 3), (-7.6, 12.0, 1.1, 3),
 ]
+
+# ---------------------------------------------------------------- scene 3 layout
+#
+# Measured with a batch-mode probe on 2026-09-17:
+#   - every rail piece is double track, centres x = -2.4 (west, ours) and x = +2.4 (east)
+#   - the pack terrain ends at z = 97.9, just past the tunnel hill, so scene 3 stands on
+#     Scene3_NorthTerrain.asset (Tools > Train Sim > Build Scene 3 Ground), z 97.9 .. 497.9
+#   - the train pivot sits 60.91 behind its nose and 61.24 ahead of its tail
+#   - the pack's curve pieces are 90 degree bends of radius ~100, useless as a crossover, so the
+#     points are laid from primitives along the same S-bend TrainPathFollower drives
+
+EAST_X = 2.4
+TRAIN_NOSE = 60.91
+TRAIN_TAIL = 61.24
+
+SCENE3_PLAYER_START_Z = 49.1   # pivot; nose at 110, clear of the hill. Scene 2 hands over here.
+SCENE3_SIGNAL_Z = 187.0        # the nose must stop short of this
+CROSS_START_Z = 195.0          # south end of the crossover, on the east track
+CROSS_END_Z = 245.0            # north end, on the west track
+SECOND_TRAIN_START_Z = 310.9   # pivot facing south, so its nose is at 250, 5 past the points
+# Facing south, the second train spans the same z as ours did at the station stop.
+SECOND_TRAIN_STOP_Z = TRAIN_STOP_Z - (TRAIN_TAIL - TRAIN_NOSE)
+
+SCENE3_BRAKING_Z = 150.0       # a point on the rail segment the player brakes along
+# Fixed shot by the far platform for the arrival: the chase camera would be looking south past
+# the end of the pack terrain, into empty sky.
+ARRIVAL_CUT_Z = 14.0           # lead car z, the north end of the platforms
+ARRIVAL_CAM = ((5.5, 3.8, 25.0), (1.0, 2.0, -40.0))   # north end of the far platform, looking along it
+
+NORTH_TERRAIN = os.path.join(REPO, "Assets", "Scenes", "Scene3_NorthTerrain.asset")
+NORTH_TERRAIN_POS = (-101, 0, 97.9)
+EXTRA_RAIL_Z = (264.46, 366.22, 467.98)   # each piece covers (z - 101.76) .. z
+MAT_STEEL = guid_for("Assets/Materials/Crossover Steel.mat")
+MAT_SLEEPER = guid_for("Assets/Materials/Crossover Sleeper.mat")
 
 STATION_KEEP = ("cement platform", "train  shellter", "mettle bench", "bench",
                 "sample vending machine", "Meta lPlates Rusted", "beem",
@@ -505,7 +541,7 @@ def point_light_block(a, go, colour, intensity=2.4, rng=6.0):
 
 
 def prefab_instance_block(a, guid, go_target, tr_target, name, pos, added=None,
-                          tag=None, extra_mods=None):
+                          tag=None, extra_mods=None, rot=(0, 0, 0, 1), euler=(0, 0, 0)):
     mods = []
 
     def mod(t, path, val, ref=None):
@@ -518,10 +554,10 @@ def prefab_instance_block(a, guid, go_target, tr_target, name, pos, added=None,
         mod(go_target, "m_TagString", tag)
     for ax, v in zip("xyz", pos):
         mod(tr_target, "m_LocalPosition." + ax, f(v))
-    for ax, v in zip("xyzw", (0, 0, 0, 1)):
+    for ax, v in zip("xyzw", rot):
         mod(tr_target, "m_LocalRotation." + ax, f(v))
-    for ax in "xyz":
-        mod(tr_target, "m_LocalEulerAnglesHint." + ax, "0")
+    for ax, v in zip("xyz", euler):
+        mod(tr_target, "m_LocalEulerAnglesHint." + ax, f(v))
 
     for t, path, val, ref in (extra_mods or []):
         mod(t, path, val, ref)
@@ -1046,8 +1082,9 @@ def build_scene2(his_guids):
     drive_id = sc.ids.new()
     wheels_id = sc.ids.new()
     audio_id = sc.ids.new()
+    exit_id = sc.ids.new()
     patch_train_instance(sc, train_inst, TRAIN_STOP_Z,
-                         [drive_id, wheels_id, audio_id], tag="Train")
+                         [drive_id, wheels_id, audio_id, exit_id], tag="Train")
     sc.add(stripped_block(train_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, train_inst))
     sc.add(stripped_block(train_tr, 4, "Transform", TRAIN_TR, TRAIN_GUID, train_inst))
     sc.add(mono_block(drive_id, train_go, SCRIPTS["TrainSpaceDrive"], """  maxSpeed: 15
@@ -1058,6 +1095,10 @@ def build_scene2(his_guids):
 
     sc.add(mono_block(wheels_id, train_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
     sc.add(mono_block(audio_id, train_go, SCRIPTS["TrainAudio"], AUDIO_FIELDS))
+
+    # Out the far side of the tunnel, scene 3 takes over at the same spot and speed.
+    sc.add(mono_block(exit_id, train_go, SCRIPTS["TunnelExitLoader"], """  handoverZ: %s
+  nextSceneName: Scene3_Crossover""" % f(SCENE3_PLAYER_START_Z)))
 
     # His Main Camera becomes the train camera: it already carries the audio listener.
     cam_go = sc.find_go("Main Camera")
@@ -1186,6 +1227,303 @@ def build_scene2(his_guids):
     return sc
 
 
+# ---------------------------------------------------------------- scene 3
+
+MATERIAL_TEMPLATE = """%%YAML 1.1
+%%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: %(name)s
+  m_Shader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties:
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _Glossiness: %(gloss)s
+    - _Metallic: %(metal)s
+    - _Mode: 0
+    m_Colors:
+    - _Color: {r: %(r)s, g: %(g)s, b: %(b)s, a: 1}
+    - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
+"""
+
+
+def write_material(name, colour, metal, gloss):
+    rel = "Assets/Materials/" + name + ".mat"
+    path = os.path.join(REPO, *rel.split("/"))
+    open(path, "w", encoding="utf-8", newline="\n").write(MATERIAL_TEMPLATE % {
+        "name": name, "r": f(colour[0]), "g": f(colour[1]), "b": f(colour[2]),
+        "metal": f(metal), "gloss": f(gloss)})
+    open(path + ".meta", "w", encoding="utf-8", newline="\n").write(
+        "fileFormatVersion: 2\nguid: %s\nNativeFormatImporter:\n  externalObjects: {}\n"
+        "  mainObjectFileID: 2100000\n  userData: \n  assetBundleName: \n"
+        "  assetBundleVariant: \n" % guid_for(rel))
+
+
+def crossover_x(z):
+    """Same S-bend as TrainPathFollower.XAtZ: east track at CROSS_START_Z, west at CROSS_END_Z."""
+    if z >= CROSS_END_Z:
+        return TRAIN_X
+    if z <= CROSS_START_Z:
+        return EAST_X
+    u = (z - CROSS_START_Z) / (CROSS_END_Z - CROSS_START_Z)
+    return (EAST_X + TRAIN_X) / 2 + (EAST_X - TRAIN_X) / 2 * math.cos(math.pi * u)
+
+
+def yaw_quat(dx, dz):
+    a = math.atan2(dx, dz) / 2
+    return (0.0, math.sin(a), 0.0, math.cos(a)), (0.0, math.degrees(2 * a), 0.0)
+
+
+def add_box(sc, parent, name, pos, rot, euler, scale, mat):
+    t, g, mf, mr = sc.ids.new(), sc.ids.new(), sc.ids.new(), sc.ids.new()
+    sc.add(go_block(g, name, [t, mf, mr]))
+    sc.add(tr_block(t, g, pos, [], parent, rot=rot, scale=scale, euler=euler))
+    sc.add(mesh_filter_block(mf, g, MESH_CUBE))
+    sc.add(mesh_renderer_block(mr, g, mat))
+    return t
+
+
+def build_crossover(sc):
+    """The points: two rails and their sleepers along the S-bend between the tracks.
+
+    Where the bend still lies over one of the tracks its sleepers would sit inside the existing
+    ones, so those are left out; the rails run the full length, a hair above the track's own, the
+    way a switch blade lies against the stock rail."""
+    root_t, root_g = sc.ids.new(), sc.ids.new()
+    kids = []
+
+    step = 2.0
+    z = CROSS_START_Z - 4.0
+    while z < CROSS_END_Z + 4.0:
+        z2 = z + step
+        x1, x2 = crossover_x(z), crossover_x(z2)
+        dx, dz = x2 - x1, z2 - z
+        length = math.hypot(dx, dz)
+        rot, euler = yaw_quat(dx, dz)
+        nx, nz = dz / length, -dx / length        # unit normal in the ground plane
+        for side in (-0.75, 0.75):
+            kids.append(add_box(sc, root_t, "Rail",
+                                ((x1 + x2) / 2 + nx * side, 0.48, (z + z2) / 2 + nz * side),
+                                rot, euler, (0.12, 0.16, length + 0.04), MAT_STEEL))
+        z = z2
+
+    z = CROSS_START_Z + 0.6
+    while z < CROSS_END_Z:
+        x = crossover_x(z)
+        if min(abs(x - TRAIN_X), abs(x - EAST_X)) > 1.6:
+            dx = crossover_x(z + 0.1) - crossover_x(z - 0.1)
+            rot, euler = yaw_quat(dx, 0.2)
+            kids.append(add_box(sc, root_t, "Sleeper", (x, 0.33, z), rot, euler,
+                                (2.5, 0.14, 0.26), MAT_SLEEPER))
+        z += 1.2
+
+    sc.add(go_block(root_g, "Crossover", [root_t]))
+    sc.add(tr_block(root_t, root_g, (0, 0, 0), kids, 0))
+    sc.roots.append(root_t)
+
+
+def remove_prefab_instance(sc, name):
+    inst = sc.prefab_instance_named(name)
+    if inst is None:
+        raise SystemExit("prefab instance missing from his scene: " + name)
+    marker = "m_PrefabInstance: {fileID: %d}" % inst
+    sc.blocks = [r for r in sc.blocks if r[1] != inst and marker not in r[3]]
+    sc.roots = [r for r in sc.roots if r != inst]
+
+
+def add_rail_pieces(sc, template_name, zs):
+    """More of his straight double track, cloned from one of his rail instances."""
+    src = sc.block(sc.prefab_instance_named(template_name))
+    pattern = (r"(target: \{fileID: " + str(RAIL_TR) + ", guid: " + RAIL_GUID +
+               r", type: 3\}\n\s+propertyPath: m_LocalPosition\.z\n\s+value: )\S+")
+    for i, z in enumerate(zs):
+        body = re.sub(pattern, r"\g<1>" + f(z), src[3])
+        body = re.sub(r"(propertyPath: m_Name\n\s+value: ).*", r"\g<1>Straight rail (north %d)" % (i + 1),
+                      body)
+        a = sc.ids.new()
+        sc.add(render(1001, a, False, body))
+        sc.roots.append(a)
+
+
+def add_north_terrain(sc):
+    """A second terrain block, cloned from the pack's, pointing at the scene 3 ground."""
+    guid = re.search(r"guid: (\w{32})", open(NORTH_TERRAIN + ".meta", encoding="utf-8").read()).group(1)
+    src = open(PACK, encoding="utf-8").read()
+    _, blocks = split_blocks(src)
+    by_anchor = {a: (c, s, b) for c, a, s, b in blocks}
+    remap = {old: sc.ids.new() for old in TERRAIN_ANCHORS}
+    for old in TERRAIN_ANCHORS:
+        cid, stripped, body = by_anchor[old]
+        for o, n in remap.items():
+            body = re.sub(r"\{fileID: %d\}" % o, "{fileID: %d}" % n, body)
+        body = body.replace("guid: e908b8a036d743c40995d42c244c1204", "guid: " + guid)
+        body = body.replace("m_Name: Terrain", "m_Name: Terrain (north)")
+        body = re.sub(r"m_LocalPosition: \{[^}]*\}",
+                      "m_LocalPosition: {x: %s, y: %s, z: %s}" % tuple(f(v) for v in NORTH_TERRAIN_POS),
+                      body)
+        sc.add(render(cid, remap[old], stripped, body))
+    sc.roots.append(remap[1294392834])
+
+
+def build_scene3(his_guids):
+    sc = Scene(SCENE1_SRC, pristine_scene1())
+
+    # The station behind us looks the way it did when we left: signals red.
+    paint_his_signal(sc, red_on=True, yellow_on=False, green_on=False)
+    build_signal(sc, "Signal 1 (approach)", APPROACH_SIGNAL_POS, red_on=True, yellow_on=False)
+
+    # His curve piece sits 1.83 above the line and across the west track exactly where the
+    # crossover and the waiting train go, so it cannot stay in this scene.
+    remove_prefab_instance(sc, "Rail.L (1)")
+    add_rail_pieces(sc, "Straight rail (2)", EXTRA_RAIL_Z)
+
+    # The crossover signal, on the same side of the line as his station signal.
+    signal_pos = (APPROACH_SIGNAL_POS[0], APPROACH_SIGNAL_POS[1], SCENE3_SIGNAL_Z + 1.0)
+    build_signal(sc, "Crossover Signal", signal_pos, red_on=True, yellow_on=False)
+    hide_catenary_over_signal(sc, signal_pos[2])
+    # The camera rides at gantry height, and on the stretch where the player is braking one of
+    # them fills the screen at exactly the wrong moment.
+    hide_catenary_over_signal(sc, SCENE3_BRAKING_Z)
+    build_crossover(sc)
+
+    # Our train, straight out of the tunnel. The director drives it.
+    train_inst = sc.prefab_instance_named("train")
+    train_go, train_tr = sc.ids.new(), sc.ids.new()
+    wheels_id, audio_id = sc.ids.new(), sc.ids.new()
+    patch_train_instance(sc, train_inst, SCENE3_PLAYER_START_Z, [wheels_id, audio_id], tag="Train")
+    sc.add(stripped_block(train_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, train_inst))
+    sc.add(stripped_block(train_tr, 4, "Transform", TRAIN_TR, TRAIN_GUID, train_inst))
+    sc.add(mono_block(wheels_id, train_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
+    sc.add(mono_block(audio_id, train_go, SCRIPTS["TrainAudio"], AUDIO_FIELDS))
+
+    # The second train: his train again, turned to face the station and painted dark red.
+    red_inst = sc.ids.new()
+    follower_id, tint_id, red_wheels_id = sc.ids.new(), sc.ids.new(), sc.ids.new()
+    sc.add(prefab_instance_block(
+        red_inst, TRAIN_GUID, TRAIN_GO, TRAIN_TR, "Second Train",
+        (TRAIN_X, TRAIN_Y, SECOND_TRAIN_START_Z),
+        added=[follower_id, tint_id, red_wheels_id],
+        rot=(0, 1, 0, 0), euler=(0, 180, 0)))
+    sc.roots.append(red_inst)
+    red_go = sc.ids.new()
+    sc.add(stripped_block(red_go, 1, "GameObject", TRAIN_GO, TRAIN_GUID, red_inst))
+    sc.add(mono_block(follower_id, red_go, SCRIPTS["TrainPathFollower"], """  westX: %s
+  eastX: %s
+  trackY: %s
+  crossStartZ: %s
+  crossEndZ: %s
+  startZ: %s
+  stopZ: %s
+  maxSpeed: 20
+  acceleration: 3
+  deceleration: 3""" % (f(TRAIN_X), f(EAST_X), f(TRAIN_Y), f(CROSS_START_Z), f(CROSS_END_Z),
+                        f(SECOND_TRAIN_START_Z), f(SECOND_TRAIN_STOP_Z))))
+    sc.add(mono_block(tint_id, red_go, SCRIPTS["TrainTint"], """  materialName: Body
+  tint: {r: 0.55, g: 0.08, b: 0.07, a: 1}"""))
+    sc.add(mono_block(red_wheels_id, red_go, SCRIPTS["TrainWheels"], WHEELS_FIELDS))
+
+    # His Main Camera follows our train, exactly as in scene 1.
+    cam_go = sc.find_go("Main Camera")
+    follow = sc.ids.new()
+    sc.add(mono_block(follow, cam_go, SCRIPTS["TrainFollowCamera"], """  target: {fileID: %d}
+  localOffset: {x: %s, y: %s, z: %s}
+  lookAtOffset: {x: %s, y: %s, z: %s}
+  followSmoothing: 4
+  snapOnStart: 1""" % (train_tr, f(FOLLOW_OFFSET[0]), f(FOLLOW_OFFSET[1]), f(FOLLOW_OFFSET[2]),
+                       f(FOLLOW_LOOKAT[0]), f(FOLLOW_LOOKAT[1]), f(FOLLOW_LOOKAT[2]))))
+    sc.add_component_to_go(cam_go, follow)
+    cam_tr = sc.component_of_type(cam_go, 4)
+    cpos = (TRAIN_X + FOLLOW_OFFSET[0], TRAIN_Y + FOLLOW_OFFSET[1], SCENE3_PLAYER_START_Z + FOLLOW_OFFSET[2])
+    ctgt = (TRAIN_X + FOLLOW_LOOKAT[0], TRAIN_Y + FOLLOW_LOOKAT[1], SCENE3_PLAYER_START_Z + FOLLOW_LOOKAT[2])
+    q = look_rotation(tuple(ctgt[i] - cpos[i] for i in range(3)))
+    r = sc.block(cam_tr)
+    r[3] = re.sub(r"m_LocalRotation: \{[^}]*\}",
+                  "m_LocalRotation: {x: %s, y: %s, z: %s, w: %s}" % tuple(f(v) for v in q), r[3])
+    r[3] = re.sub(r"m_LocalPosition: \{[^}]*\}",
+                  "m_LocalPosition: {x: %s, y: %s, z: %s}" % tuple(f(v) for v in cpos), r[3])
+    r[3] = re.sub(r"m_LocalEulerAnglesHint: \{[^}]*\}",
+                  "m_LocalEulerAnglesHint: {x: %s, y: %s, z: %s}" % tuple(f(v) for v in euler_from_quat(q)),
+                  r[3])
+
+    apos, atgt = ARRIVAL_CAM
+    q = look_rotation(tuple(atgt[i] - apos[i] for i in range(3)))
+    at, ag, arrival_cam = sc.ids.new(), sc.ids.new(), sc.ids.new()
+    sc.add(go_block(ag, "Cam_Arrival", [at, arrival_cam]))
+    sc.add(tr_block(at, ag, apos, [], 0, rot=q, euler=euler_from_quat(q)))
+    sc.add(camera_block(arrival_cam, ag, False))
+    sc.roots.append(at)
+
+    # The same framing on the second train, measured from its lead car rather than its pivot.
+    lead = 50.54   # Front carType A, from the probe
+    dt, dg, director = sc.ids.new(), sc.ids.new(), sc.ids.new()
+    sc.add(go_block(dg, "Scene3Director", [dt, director]))
+    sc.add(tr_block(dt, dg, (0, 0, 0), [], 0))
+    sc.add(mono_block(director, dg, SCRIPTS["Scene3Director"], """  playerTrain: {fileID: %d}
+  maxSpeed: 15
+  acceleration: 1.2
+  deceleration: 5
+  noseOffset: %s
+  signalZ: %s
+  promptLead: 30
+  secondTrain: {fileID: %d}
+  cutToSecondTrainDelay: 1
+  followCamera: {fileID: %d}
+  secondTrainOffset: {x: 0, y: %s, z: %s}
+  secondTrainLookAt: {x: 0, y: %s, z: %s}
+  arrivalCamera: {fileID: %d}
+  arrivalCutZ: %s
+  firstSceneName: SampleScene
+  endCardDelay: 1.5""" % (train_tr, f(TRAIN_NOSE), f(SCENE3_SIGNAL_Z), follower_id, follow,
+                          f(FOLLOW_OFFSET[1]), f(FOLLOW_OFFSET[2] - lead),
+                          f(FOLLOW_LOOKAT[1]), f(FOLLOW_LOOKAT[2] - lead),
+                          arrival_cam, f(ARRIVAL_CUT_Z))))
+    sc.roots.append(dt)
+
+    add_station(sc)
+    add_north_terrain(sc)
+    sc.write(SCENE3_OUT)
+
+    meta = SCENE3_OUT + ".meta"
+    if not os.path.exists(meta):
+        open(meta, "w", encoding="utf-8", newline="\n").write(
+            "fileFormatVersion: 2\nguid: %s\nDefaultImporter:\n  externalObjects: {}\n"
+            "  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
+            % guid_for("Assets/Scenes/Scene3_Crossover.unity"))
+    return sc
+
+
+def add_scene3_to_build_settings():
+    p = os.path.join(REPO, "ProjectSettings", "EditorBuildSettings.asset")
+    s = open(p, encoding="utf-8").read()
+    if "Scene3_Crossover.unity" in s:
+        return False
+    entry = ("  - enabled: 1\n    path: Assets/Scenes/Scene3_Crossover.unity\n    guid: %s\n"
+             % guid_for("Assets/Scenes/Scene3_Crossover.unity"))
+    s = s.replace("  m_configObjects:", entry + "  m_configObjects:", 1)
+    open(p, "w", encoding="utf-8", newline="\n").write(s)
+    return True
+
+
 # ---------------------------------------------------------------- main
 
 def his_script_guids():
@@ -1207,10 +1545,24 @@ def add_train_tag():
 
 
 if __name__ == "__main__":
+    import sys
+
     g = his_script_guids()
     print("his script guids:", g)
     print("Train tag added:", add_train_tag())
+    write_material("Crossover Steel", (0.42, 0.42, 0.44), 0.6, 0.45)
+    write_material("Crossover Sleeper", (0.24, 0.17, 0.12), 0.0, 0.1)
     s2 = build_scene2(g)         # from his pristine scene, before scene 1 is overwritten
     print("scene 2 written:", SCENE2_OUT)
-    s1 = build_scene1(g)
-    print("scene 1 written:", SCENE1_OUT)
+    s3 = build_scene3(g)
+    print("scene 3 written:", SCENE3_OUT)
+    print("scene 3 added to build settings:", add_scene3_to_build_settings())
+
+    # Scene 1 carries hand edits made in the editor on 2026-09-13 (commit 0046853: Signal 1's
+    # pole, housing and yellow lamp removed, train started further back) that were never folded
+    # back into this generator, so rebuilding it would silently undo them. Opt in explicitly.
+    if "--scene1" in sys.argv:
+        s1 = build_scene1(g)
+        print("scene 1 written:", SCENE1_OUT)
+    else:
+        print("scene 1 left alone (pass --scene1 to rebuild it and lose the 0046853 edits)")

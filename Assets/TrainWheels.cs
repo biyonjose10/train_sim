@@ -20,12 +20,14 @@ public class TrainWheels : MonoBehaviour
 
     private Transform[] wheels;
     private TrainSpaceDrive drive;
+    private TrainPathFollower follower;
     private Vector3 lastPosition;
     private float speed;
 
     void Start()
     {
         drive = GetComponent<TrainSpaceDrive>();
+        follower = GetComponent<TrainPathFollower>();
         lastPosition = transform.position;
 
         var found = new System.Collections.Generic.List<Transform>();
@@ -69,6 +71,12 @@ public class TrainWheels : MonoBehaviour
         if (drive != null && speed <= 0.001f)
         {
             speed = drive.CurrentSpeed;
+        }
+
+        // The second train in scene 3 moves its cars one by one along the crossover.
+        if (follower != null && speed <= 0.001f)
+        {
+            speed = follower.CurrentSpeed;
         }
 
         if (speed <= 0.001f)

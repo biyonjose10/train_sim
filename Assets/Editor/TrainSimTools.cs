@@ -24,6 +24,7 @@ namespace TrainSim.SceneBuilding
     {
         const string Scene1Path = "Assets/Scenes/SampleScene.unity";
         const string Scene2Path = "Assets/Scenes/Scene2_StationBoarding.unity";
+        const string Scene3Path = "Assets/Scenes/Scene3_Crossover.unity";
 
         const string TrainPrefabPath =
             "Assets/Polyeler/Simple Train Pack/Prefabs/Train/Train_Type A.prefab";
@@ -55,6 +56,13 @@ namespace TrainSim.SceneBuilding
             Debug.Log("[TRAIN SIM] Opened " + Scene2Path);
         }
 
+        [MenuItem("Tools/Train Sim/Open Scene 3", priority = 2)]
+        public static void OpenScene3()
+        {
+            EditorSceneManager.OpenScene(Scene3Path, OpenSceneMode.Single);
+            Debug.Log("[TRAIN SIM] Opened " + Scene3Path);
+        }
+
         /// <summary>
         /// Loads scene 1 with scene 2 alongside it, for comparing the two in the editor.
         ///
@@ -83,13 +91,15 @@ namespace TrainSim.SceneBuilding
             var wanted = new List<EditorBuildSettingsScene>
             {
                 new EditorBuildSettingsScene(Scene1Path, true),
-                new EditorBuildSettingsScene(Scene2Path, true)
+                new EditorBuildSettingsScene(Scene2Path, true),
+                new EditorBuildSettingsScene(Scene3Path, true)
             };
 
             foreach (var existing in EditorBuildSettings.scenes)
             {
                 if (existing.path != Scene1Path &&
-                    existing.path != Scene2Path)
+                    existing.path != Scene2Path &&
+                    existing.path != Scene3Path)
                 {
                     wanted.Add(existing);
                 }
@@ -184,6 +194,190 @@ namespace TrainSim.SceneBuilding
             Debug.Log(
                 "[TRAIN SIM] Carved " + cut + " terrain cells into a tunnel between z " +
                 TunnelStartZ + " and z " + TunnelEndZ + "."
+            );
+        }
+
+        // ==========================================
+        // GROUND NORTH OF THE TUNNEL (SCENE 3)
+        // ==========================================
+
+        const string StageTerrainPath =
+            "Assets/pixel horror abandoned rural  train station/Terrain/stage.asset";
+
+        const string NorthTerrainPath = "Assets/Scenes/Scene3_NorthTerrain.asset";
+
+        // The pack terrain covers z -102.1 to 97.9. Scene 3 happens beyond that, where there was
+        // nothing but sky under the rails, so this continues the ground for another 400 units.
+        static readonly Vector3 NorthTerrainOrigin = new Vector3(-101f, 0f, 97.9f);
+        static readonly Vector3 NorthTerrainSize = new Vector3(200f, 600f, 400f);
+        const float HillFadeLength = 30f;       // the tunnel hill runs off the pack terrain's edge
+        const float TreeClearance = 12f;        // keep the line clear so the second train is visible
+
+        /// <summary>
+        /// Builds the terrain scene 3 stands on and saves it as an asset for the generator to use.
+        ///
+        /// Its south edge copies the heights along the north edge of the pack terrain and eases
+        /// them down to flat, so the tunnel hill ends in a slope instead of a cliff with a gap
+        /// under it, and the tunnel cut carries on through that slope. The ground cover, trees
+        /// and grass use the pack's own layers and prototypes at about the pack's tree density.
+        ///
+        /// Deterministic: a fixed seed, so rebuilding it gives the same forest.
+        /// </summary>
+        [MenuItem("Tools/Train Sim/Build Scene 3 Ground", priority = 23)]
+        public static void BuildNorthTerrain()
+        {
+            TerrainData stage = AssetDatabase.LoadAssetAtPath<TerrainData>(StageTerrainPath);
+
+            if (stage == null)
+            {
+                Debug.LogError("[TRAIN SIM] Cannot find " + StageTerrainPath);
+                return;
+            }
+
+            var data = new TerrainData();
+            data.heightmapResolution = 513;
+            data.size = NorthTerrainSize;
+            data.alphamapResolution = 512;
+            data.SetDetailResolution(256, 32);
+
+            int res = data.heightmapResolution;
+            var heights = new float[res, res];
+            var holes = new bool[res - 1, res - 1];
+            var random = new System.Random(20260917);
+
+            for (int zi = 0; zi < res; zi++)
+            {
+                float worldZ = NorthTerrainOrigin.z + zi / (float)(res - 1) * NorthTerrainSize.z;
+                float fade = 1f - Mathf.SmoothStep(0f, 1f, (worldZ - NorthTerrainOrigin.z) / HillFadeLength);
+
+                for (int xi = 0; xi < res; xi++)
+                {
+                    float u = xi / (float)(res - 1);
+                    float worldX = NorthTerrainOrigin.x + u * NorthTerrainSize.x;
+
+                    // The pack terrain's own height along its north edge, carried on and eased out.
+                    float edge = stage.GetInterpolatedHeight(u, 1f);
+
+                    // Low rolling ground well away from the line, so the far side is not a table top.
+                    float away = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(35f, 75f, Mathf.Abs(worldX)));
+                    float rolling = Mathf.PerlinNoise(worldX * 0.018f + 3.7f, worldZ * 0.018f + 1.3f) * 16f * away;
+
+                    heights[zi, xi] = (edge * fade + rolling) / NorthTerrainSize.y;
+                }
+            }
+
+            data.SetHeights(0, 0, heights);
+
+            // Carry the tunnel cut through the part of the hill that spills onto this terrain.
+            for (int y = 0; y < res - 1; y++)
+            {
+                float worldZ = NorthTerrainOrigin.z + y / (float)(res - 2) * NorthTerrainSize.z;
+
+                for (int x = 0; x < res - 1; x++)
+                {
+                    float worldX = NorthTerrainOrigin.x + x / (float)(res - 2) * NorthTerrainSize.x;
+                    bool inCut = Mathf.Abs(worldX) <= TunnelHalfWidth &&
+                                 worldZ <= NorthTerrainOrigin.z + HillFadeLength;
+
+                    holes[y, x] = !inCut;   // true means solid ground
+                }
+            }
+
+            data.SetHoles(0, 0, holes);
+
+            // Ground cover: grass, with dirt along the line like the station end.
+            data.terrainLayers = stage.terrainLayers;
+            int alphaRes = data.alphamapResolution;
+            int layers = data.terrainLayers.Length;
+            int grass = 0;
+            int dirt = Mathf.Min(2, layers - 1);
+            var alphas = new float[alphaRes, alphaRes, layers];
+
+            for (int y = 0; y < alphaRes; y++)
+            {
+                for (int x = 0; x < alphaRes; x++)
+                {
+                    float worldX = NorthTerrainOrigin.x + x / (float)(alphaRes - 1) * NorthTerrainSize.x;
+                    float dirtAmount = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(9f, 16f, Mathf.Abs(worldX)));
+
+                    alphas[y, x, grass] = 1f - dirtAmount;
+                    alphas[y, x, dirt] += dirtAmount;
+                }
+            }
+
+            data.SetAlphamaps(0, 0, alphas);
+
+            // Trees on a jittered grid at roughly the pack's density, kept off the line.
+            data.treePrototypes = stage.treePrototypes;
+            var trees = new List<TreeInstance>();
+            const float spacing = 5.2f;
+
+            for (float z = NorthTerrainOrigin.z + 2f; z < NorthTerrainOrigin.z + NorthTerrainSize.z - 2f; z += spacing)
+            {
+                for (float x = NorthTerrainOrigin.x + 2f; x < NorthTerrainOrigin.x + NorthTerrainSize.x - 2f; x += spacing)
+                {
+                    float px = x + (float)(random.NextDouble() - 0.5) * spacing * 0.9f;
+                    float pz = z + (float)(random.NextDouble() - 0.5) * spacing * 0.9f;
+                    int prototype = random.Next(data.treePrototypes.Length);
+                    float scale = 0.8f + (float)random.NextDouble() * 0.45f;
+                    float rotation = (float)random.NextDouble() * Mathf.PI * 2f;
+                    bool keep = random.NextDouble() < 0.85;
+
+                    if (!keep || Mathf.Abs(px) < TreeClearance)
+                    {
+                        continue;
+                    }
+
+                    float nx = (px - NorthTerrainOrigin.x) / NorthTerrainSize.x;
+                    float nz = (pz - NorthTerrainOrigin.z) / NorthTerrainSize.z;
+
+                    trees.Add(new TreeInstance
+                    {
+                        position = new Vector3(nx, data.GetInterpolatedHeight(nx, nz) / NorthTerrainSize.y, nz),
+                        prototypeIndex = prototype,
+                        widthScale = scale,
+                        heightScale = scale,
+                        rotation = rotation,
+                        color = Color.white,
+                        lightmapColor = Color.white
+                    });
+                }
+            }
+
+            data.SetTreeInstances(trees.ToArray(), true);
+
+            // Grass clumps in scattered patches, off the ballast.
+            data.detailPrototypes = stage.detailPrototypes;
+
+            if (data.detailPrototypes.Length > 0)
+            {
+                int detailRes = data.detailResolution;
+                var detail = new int[detailRes, detailRes];
+
+                for (int y = 0; y < detailRes; y++)
+                {
+                    for (int x = 0; x < detailRes; x++)
+                    {
+                        float worldX = NorthTerrainOrigin.x + x / (float)(detailRes - 1) * NorthTerrainSize.x;
+                        float patch = Mathf.PerlinNoise(x * 0.09f + 11f, y * 0.09f + 5f);
+
+                        if (Mathf.Abs(worldX) > 8f && patch > 0.62f)
+                        {
+                            detail[y, x] = 1 + random.Next(3);
+                        }
+                    }
+                }
+
+                data.SetDetailLayer(0, 0, 0, detail);
+            }
+
+            AssetDatabase.DeleteAsset(NorthTerrainPath);
+            AssetDatabase.CreateAsset(data, NorthTerrainPath);
+            AssetDatabase.SaveAssets();
+
+            Debug.Log(
+                "[TRAIN SIM] Built " + NorthTerrainPath + " with " + trees.Count + " trees, " +
+                "from z " + NorthTerrainOrigin.z + " to z " + (NorthTerrainOrigin.z + NorthTerrainSize.z) + "."
             );
         }
 
@@ -298,7 +492,7 @@ namespace TrainSim.SceneBuilding
             BuildPlayerOptions options = new BuildPlayerOptions();
 
             // Order matters: index 0 is what the player opens with.
-            options.scenes = new[] { Scene1Path, Scene2Path };
+            options.scenes = new[] { Scene1Path, Scene2Path, Scene3Path };
             options.locationPathName = BuildDir + "/TrainSim.exe";
             options.target = BuildTarget.StandaloneWindows64;
             options.options = BuildOptions.None;
